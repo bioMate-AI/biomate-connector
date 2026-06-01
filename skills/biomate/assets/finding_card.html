@@ -1,0 +1,45 @@
+<!--
+  BioMate Finding card — server-renderable HTML
+
+  Variables:
+    {{title}}             short title, e.g. "12 compounds pass all ADMET filters"
+    {{summary_md_html}}   pre-rendered HTML of summary_md (sanitized server-side)
+    {{thumbnail_url}}     optional pre-rendered figure URL (S3 signed)
+    {{kvs}}               array of {label, value} stats (rendered server-side as <li>s)
+    {{view_url}}          deep link to the finding row in the live BioMate panel
+
+  Used by:
+    - MCP server attachments for the file-display capability
+    - export_report when the user wants a single-finding sharable card
+-->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{title}}</title>
+<style>
+  body { font-family: -apple-system, "Segoe UI", system-ui, sans-serif; margin: 0; padding: 16px; background: #f8fafc; }
+  .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; max-width: 560px; }
+  h1 { margin: 0 0 12px; font-size: 18px; color: #111827; }
+  .summary { font-size: 14px; line-height: 1.55; color: #374151; }
+  .thumb { margin: 14px 0; }
+  .thumb img { max-width: 100%; border: 1px solid #e5e7eb; border-radius: 6px; }
+  .stats { list-style: none; padding: 0; margin: 14px 0 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }
+  .stats li { background: #f3f4f6; padding: 8px 10px; border-radius: 6px; }
+  .stats .label { display: block; font-size: 11px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.04em; }
+  .stats .value { display: block; font-size: 16px; font-weight: 700; color: #111827; margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .footer { margin-top: 16px; font-size: 12px; }
+  .footer a { color: #2563eb; text-decoration: none; }
+  .footer a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>{{title}}</h1>
+    <div class="summary">{{summary_md_html}}</div>
+    {{#thumbnail_url}}<div class="thumb"><img src="{{thumbnail_url}}" alt=""></div>{{/thumbnail_url}}
+    <ul class="stats">{{kvs}}</ul>
+    <div class="footer"><a href="{{view_url}}">Open finding in BioMate panel →</a></div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,1221 @@
+{
+  "version": "2.0.0",
+  "generated_from": "backend/lib/mcp/tools_manifest.py",
+  "mcp": [
+    {
+      "name": "biomate_session",
+      "description": "Run a complete BioMate scientific session from a natural-language goal. BioMate picks the workflow, fills parameters from context, runs on AWS Batch, handles QC gates with auto-loop remediation, and produces findings. While running, the tool streams progress events (phase started, step completed, QC gate fired, auto-loop remediation, finding) to the host so the user sees real-time updates the same way BioMate's web panel does. Returns the final run summary, a deep link to the live panel, and the report URL.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "goal": {
+            "type": "string",
+            "description": "Natural language description of what to do. Examples: 'screen these 12 SMILES for hERG and CYP3A4 liability', 'run nf-core/rnaseq on FASTQ files in s3://bucket/exp42/, human, paired-end', 'predict the structure of P04637 and the top 5 destabilizing mutations'."
+          },
+          "inputs": {
+            "type": "object",
+            "description": "Optional structured inputs (S3 keys, sequences, SMILES, parameter overrides). BioMate will merge these with whatever it extracts from `goal`.",
+            "additionalProperties": true
+          },
+          "experiment_id": {
+            "type": "string",
+            "description": "Optional experiment to attach this run to (from recall_memory or create_experiment)."
+          },
+          "stream": {
+            "type": "boolean",
+            "description": "Emit progress notifications during execution. Default true. Set false for hosts without notification support (then poll get_run).",
+            "default": true
+          }
+        },
+        "required": [
+          "goal"
+        ]
+      }
+    },
+    {
+      "name": "search_workflow",
+      "description": "Search the BioMate workflow catalog (2,455 indexed workflows across 34 domains) by natural language. Returns ranked workflow cards with id, name, domain, one-line description, and estimated AWS Batch cost. Use this when the user wants to pick a workflow explicitly; otherwise prefer biomate_session.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Natural language description of the analysis."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Max results (default 5, max 20).",
+            "default": 5
+          },
+          "domain": {
+            "type": "string",
+            "description": "Optional domain filter: transcriptomics, genomics, proteomics, drug_discovery, cryo_em, etc."
+          }
+        },
+        "required": [
+          "query"
+        ]
+      }
+    },
+    {
+      "name": "get_workflow_spec",
+      "description": "Return the full specification for a workflow: required + optional parameters (with types and allowed values), default QC profile and thresholds, expected input files, estimated cost and runtime, and any license requirements. Call this before run_workflow when the user wants explicit parameter control.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "workflow_id": {
+            "type": "string",
+            "description": "Workflow ID from search_workflow."
+          }
+        },
+        "required": [
+          "workflow_id"
+        ]
+      }
+    },
+    {
+      "name": "run_workflow",
+      "description": "Execute a specific BioMate workflow on AWS Batch with explicit parameters. Returns a run_id immediately. If stream=true, also emits progress notifications until the run terminates (same events as biomate_session). Use biomate_session instead when the user gave you a natural-language goal.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "workflow_id": {
+            "type": "string",
+            "description": "Workflow ID from search_workflow."
+          },
+          "params": {
+            "type": "object",
+            "description": "Parameter dict. Required params come from get_workflow_spec.",
+            "additionalProperties": true
+          },
+          "experiment_id": {
+            "type": "string",
+            "description": "Optional experiment to attach to."
+          },
+          "stream": {
+            "type": "boolean",
+            "description": "Emit progress notifications while running. Default false.",
+            "default": false
+          }
+        },
+        "required": [
+          "workflow_id"
+        ]
+      }
+    },
+    {
+      "name": "get_run",
+      "description": "Return everything about a run in one call: status (pending|running|completed|failed), per-phase and per-step progress with timestamps, output files with download URLs, structured findings, QC gate results, and any auto-loop remediations applied. Replaces get_run_status + get_run_results + step-level findings polling.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "description": "Run ID."
+          },
+          "include_findings": {
+            "type": "boolean",
+            "description": "Include structured findings cards (default true).",
+            "default": true
+          }
+        },
+        "required": [
+          "run_id"
+        ]
+      }
+    },
+    {
+      "name": "cancel_run",
+      "description": "Cancel a running or queued BioMate workflow on AWS Batch.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "description": "Run ID to cancel."
+          }
+        },
+        "required": [
+          "run_id"
+        ]
+      }
+    },
+    {
+      "name": "list_runs",
+      "description": "List the user's recent runs with status and timestamps. Filter by status or experiment.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "description": "Max runs to return (default 10).",
+            "default": 10
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "all",
+              "running",
+              "completed",
+              "failed",
+              "pending"
+            ],
+            "default": "all"
+          },
+          "experiment_id": {
+            "type": "string",
+            "description": "Optional experiment filter."
+          }
+        }
+      }
+    },
+    {
+      "name": "preview_file",
+      "description": "Render a server-side preview of an output file (FASTA, VCF, CSV/TSV, image, PDF). Returns markdown + optional thumbnail PNG. Use this to show the user what an output looks like without downloading multi-GB files. For input QC of files the user is about to upload, prefer biomate_session (it runs a real QC workflow).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "s3_key": {
+            "type": "string",
+            "description": "S3 key (s3://bucket/path) from get_run output_files."
+          },
+          "run_id": {
+            "type": "string",
+            "description": "Optional run_id for context-aware parsing."
+          },
+          "max_rows": {
+            "type": "integer",
+            "description": "For tabular files (default 100).",
+            "default": 100
+          }
+        },
+        "required": [
+          "s3_key"
+        ]
+      }
+    },
+    {
+      "name": "export_report",
+      "description": "Render a publication-ready report for a completed run as PDF or markdown. Includes the methods section, QC audit trail, structured findings, and figures. This is what users need for IND submissions, CRO compliance packages, and publication supplementary materials.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "description": "Completed run ID."
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "pdf",
+              "markdown",
+              "docx"
+            ],
+            "default": "pdf"
+          },
+          "sections": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "methods",
+                "qc",
+                "findings",
+                "figures",
+                "appendix"
+              ]
+            },
+            "description": "Which sections to include (default: all)."
+          }
+        },
+        "required": [
+          "run_id"
+        ]
+      }
+    },
+    {
+      "name": "analyze_results",
+      "description": "Ask BioMate's AI to interpret a completed run. Returns natural-language analysis: key findings, quality assessment, scientific interpretation, recommended next steps. Use after get_run when the user asks 'what does this mean?'.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "description": "Completed run ID."
+          },
+          "question": {
+            "type": "string",
+            "description": "Optional focused question."
+          }
+        },
+        "required": [
+          "run_id"
+        ]
+      }
+    },
+    {
+      "name": "explain_error",
+      "description": "Diagnose a failed run. Returns the likely root cause (genome mismatch, missing input, OOM, container pull failure, etc.) and the specific fix. Often the next step is run_workflow with corrected params.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "description": "Failed run ID."
+          },
+          "error_log": {
+            "type": "string",
+            "description": "Optional pasted error log."
+          }
+        },
+        "required": [
+          "run_id"
+        ]
+      }
+    },
+    {
+      "name": "query_database",
+      "description": "Query a biological/chemical database by accession or name. Supported: uniprot, pdb, alphafold, ncbi_gene, dbsnp, clinvar, gnomad, kegg, reactome, chebi, pubchem, hpo, omim, string.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "database": {
+            "type": "string",
+            "enum": [
+              "uniprot",
+              "pdb",
+              "alphafold",
+              "ncbi_gene",
+              "dbsnp",
+              "clinvar",
+              "gnomad",
+              "kegg",
+              "reactome",
+              "chebi",
+              "pubchem",
+              "hpo",
+              "omim",
+              "string"
+            ]
+          },
+          "query": {
+            "type": "string",
+            "description": "Accession, gene symbol, or compound name."
+          }
+        },
+        "required": [
+          "database",
+          "query"
+        ]
+      }
+    },
+    {
+      "name": "recall_memory",
+      "description": "Retrieve relevant prior context for the current goal: past runs on similar inputs, validated procedures, findings tagged by the user, learned parameter preferences. Call before biomate_session for repeat users \u2014 it dramatically improves param auto-fill and avoids re-running work.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "What to recall \u2014 usually the user's goal."
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "runs",
+              "findings",
+              "procedures",
+              "all"
+            ],
+            "default": "all"
+          },
+          "limit": {
+            "type": "integer",
+            "default": 5
+          }
+        },
+        "required": [
+          "query"
+        ]
+      }
+    },
+    {
+      "name": "upload_file",
+      "description": "Get a one-shot signed S3 PUT URL so the host can upload a local file directly to BioMate's data plane without proxying bytes through the chat transport. Returns the s3_key to use in subsequent tool calls. For files >5MB this is mandatory; for small text payloads, inline strings are fine.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "filename": {
+            "type": "string",
+            "description": "Original filename (sets content-type and extension)."
+          },
+          "size_bytes": {
+            "type": "integer",
+            "description": "File size for quota check."
+          },
+          "content_type": {
+            "type": "string",
+            "description": "MIME type (auto-detected from filename if omitted)."
+          }
+        },
+        "required": [
+          "filename"
+        ]
+      }
+    }
+  ],
+  "anthropic": [
+    {
+      "name": "biomate_session",
+      "description": "Run a complete BioMate scientific session from a natural-language goal. BioMate picks the workflow, fills parameters from context, runs on AWS Batch, handles QC gates with auto-loop remediation, and produces findings. While running, the tool streams progress events (phase started, step completed, QC gate fired, auto-loop remediation, finding) to the host so the user sees real-time updates the same way BioMate's web panel does. Returns the final run summary, a deep link to the live panel, and the report URL.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "goal": {
+            "type": "string",
+            "description": "Natural language description of what to do. Examples: 'screen these 12 SMILES for hERG and CYP3A4 liability', 'run nf-core/rnaseq on FASTQ files in s3://bucket/exp42/, human, paired-end', 'predict the structure of P04637 and the top 5 destabilizing mutations'."
+          },
+          "inputs": {
+            "type": "object",
+            "description": "Optional structured inputs (S3 keys, sequences, SMILES, parameter overrides). BioMate will merge these with whatever it extracts from `goal`.",
+            "additionalProperties": true
+          },
+          "experiment_id": {
+            "type": "string",
+            "description": "Optional experiment to attach this run to (from recall_memory or create_experiment)."
+          },
+          "stream": {
+            "type": "boolean",
+            "description": "Emit progress notifications during execution. Default true. Set false for hosts without notification support (then poll get_run).",
+            "default": true
+          }
+        },
+        "required": [
+          "goal"
+        ]
+      }
+    },
+    {
+      "name": "search_workflow",
+      "description": "Search the BioMate workflow catalog (2,455 indexed workflows across 34 domains) by natural language. Returns ranked workflow cards with id, name, domain, one-line description, and estimated AWS Batch cost. Use this when the user wants to pick a workflow explicitly; otherwise prefer biomate_session.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Natural language description of the analysis."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Max results (default 5, max 20).",
+            "default": 5
+          },
+          "domain": {
+            "type": "string",
+            "description": "Optional domain filter: transcriptomics, genomics, proteomics, drug_discovery, cryo_em, etc."
+          }
+        },
+        "required": [
+          "query"
+        ]
+      }
+    },
+    {
+      "name": "get_workflow_spec",
+      "description": "Return the full specification for a workflow: required + optional parameters (with types and allowed values), default QC profile and thresholds, expected input files, estimated cost and runtime, and any license requirements. Call this before run_workflow when the user wants explicit parameter control.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "workflow_id": {
+            "type": "string",
+            "description": "Workflow ID from search_workflow."
+          }
+        },
+        "required": [
+          "workflow_id"
+        ]
+      }
+    },
+    {
+      "name": "run_workflow",
+      "description": "Execute a specific BioMate workflow on AWS Batch with explicit parameters. Returns a run_id immediately. If stream=true, also emits progress notifications until the run terminates (same events as biomate_session). Use biomate_session instead when the user gave you a natural-language goal.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "workflow_id": {
+            "type": "string",
+            "description": "Workflow ID from search_workflow."
+          },
+          "params": {
+            "type": "object",
+            "description": "Parameter dict. Required params come from get_workflow_spec.",
+            "additionalProperties": true
+          },
+          "experiment_id": {
+            "type": "string",
+            "description": "Optional experiment to attach to."
+          },
+          "stream": {
+            "type": "boolean",
+            "description": "Emit progress notifications while running. Default false.",
+            "default": false
+          }
+        },
+        "required": [
+          "workflow_id"
+        ]
+      }
+    },
+    {
+      "name": "get_run",
+      "description": "Return everything about a run in one call: status (pending|running|completed|failed), per-phase and per-step progress with timestamps, output files with download URLs, structured findings, QC gate results, and any auto-loop remediations applied. Replaces get_run_status + get_run_results + step-level findings polling.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "description": "Run ID."
+          },
+          "include_findings": {
+            "type": "boolean",
+            "description": "Include structured findings cards (default true).",
+            "default": true
+          }
+        },
+        "required": [
+          "run_id"
+        ]
+      }
+    },
+    {
+      "name": "cancel_run",
+      "description": "Cancel a running or queued BioMate workflow on AWS Batch.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "description": "Run ID to cancel."
+          }
+        },
+        "required": [
+          "run_id"
+        ]
+      }
+    },
+    {
+      "name": "list_runs",
+      "description": "List the user's recent runs with status and timestamps. Filter by status or experiment.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "description": "Max runs to return (default 10).",
+            "default": 10
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "all",
+              "running",
+              "completed",
+              "failed",
+              "pending"
+            ],
+            "default": "all"
+          },
+          "experiment_id": {
+            "type": "string",
+            "description": "Optional experiment filter."
+          }
+        }
+      }
+    },
+    {
+      "name": "preview_file",
+      "description": "Render a server-side preview of an output file (FASTA, VCF, CSV/TSV, image, PDF). Returns markdown + optional thumbnail PNG. Use this to show the user what an output looks like without downloading multi-GB files. For input QC of files the user is about to upload, prefer biomate_session (it runs a real QC workflow).",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "s3_key": {
+            "type": "string",
+            "description": "S3 key (s3://bucket/path) from get_run output_files."
+          },
+          "run_id": {
+            "type": "string",
+            "description": "Optional run_id for context-aware parsing."
+          },
+          "max_rows": {
+            "type": "integer",
+            "description": "For tabular files (default 100).",
+            "default": 100
+          }
+        },
+        "required": [
+          "s3_key"
+        ]
+      }
+    },
+    {
+      "name": "export_report",
+      "description": "Render a publication-ready report for a completed run as PDF or markdown. Includes the methods section, QC audit trail, structured findings, and figures. This is what users need for IND submissions, CRO compliance packages, and publication supplementary materials.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "description": "Completed run ID."
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "pdf",
+              "markdown",
+              "docx"
+            ],
+            "default": "pdf"
+          },
+          "sections": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "methods",
+                "qc",
+                "findings",
+                "figures",
+                "appendix"
+              ]
+            },
+            "description": "Which sections to include (default: all)."
+          }
+        },
+        "required": [
+          "run_id"
+        ]
+      }
+    },
+    {
+      "name": "analyze_results",
+      "description": "Ask BioMate's AI to interpret a completed run. Returns natural-language analysis: key findings, quality assessment, scientific interpretation, recommended next steps. Use after get_run when the user asks 'what does this mean?'.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "description": "Completed run ID."
+          },
+          "question": {
+            "type": "string",
+            "description": "Optional focused question."
+          }
+        },
+        "required": [
+          "run_id"
+        ]
+      }
+    },
+    {
+      "name": "explain_error",
+      "description": "Diagnose a failed run. Returns the likely root cause (genome mismatch, missing input, OOM, container pull failure, etc.) and the specific fix. Often the next step is run_workflow with corrected params.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "description": "Failed run ID."
+          },
+          "error_log": {
+            "type": "string",
+            "description": "Optional pasted error log."
+          }
+        },
+        "required": [
+          "run_id"
+        ]
+      }
+    },
+    {
+      "name": "query_database",
+      "description": "Query a biological/chemical database by accession or name. Supported: uniprot, pdb, alphafold, ncbi_gene, dbsnp, clinvar, gnomad, kegg, reactome, chebi, pubchem, hpo, omim, string.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "database": {
+            "type": "string",
+            "enum": [
+              "uniprot",
+              "pdb",
+              "alphafold",
+              "ncbi_gene",
+              "dbsnp",
+              "clinvar",
+              "gnomad",
+              "kegg",
+              "reactome",
+              "chebi",
+              "pubchem",
+              "hpo",
+              "omim",
+              "string"
+            ]
+          },
+          "query": {
+            "type": "string",
+            "description": "Accession, gene symbol, or compound name."
+          }
+        },
+        "required": [
+          "database",
+          "query"
+        ]
+      }
+    },
+    {
+      "name": "recall_memory",
+      "description": "Retrieve relevant prior context for the current goal: past runs on similar inputs, validated procedures, findings tagged by the user, learned parameter preferences. Call before biomate_session for repeat users \u2014 it dramatically improves param auto-fill and avoids re-running work.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "What to recall \u2014 usually the user's goal."
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "runs",
+              "findings",
+              "procedures",
+              "all"
+            ],
+            "default": "all"
+          },
+          "limit": {
+            "type": "integer",
+            "default": 5
+          }
+        },
+        "required": [
+          "query"
+        ]
+      }
+    },
+    {
+      "name": "upload_file",
+      "description": "Get a one-shot signed S3 PUT URL so the host can upload a local file directly to BioMate's data plane without proxying bytes through the chat transport. Returns the s3_key to use in subsequent tool calls. For files >5MB this is mandatory; for small text payloads, inline strings are fine.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "filename": {
+            "type": "string",
+            "description": "Original filename (sets content-type and extension)."
+          },
+          "size_bytes": {
+            "type": "integer",
+            "description": "File size for quota check."
+          },
+          "content_type": {
+            "type": "string",
+            "description": "MIME type (auto-detected from filename if omitted)."
+          }
+        },
+        "required": [
+          "filename"
+        ]
+      }
+    }
+  ],
+  "openai": [
+    {
+      "type": "function",
+      "function": {
+        "name": "biomate_session",
+        "description": "Run a complete BioMate scientific session from a natural-language goal. BioMate picks the workflow, fills parameters from context, runs on AWS Batch, handles QC gates with auto-loop remediation, and produces findings. While running, the tool streams progress events (phase started, step completed, QC gate fired, auto-loop remediation, finding) to the host so the user sees real-time updates the same way BioMate's web panel does. Returns the final run summary, a deep link to the live panel, and the report URL.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "goal": {
+              "type": "string",
+              "description": "Natural language description of what to do. Examples: 'screen these 12 SMILES for hERG and CYP3A4 liability', 'run nf-core/rnaseq on FASTQ files in s3://bucket/exp42/, human, paired-end', 'predict the structure of P04637 and the top 5 destabilizing mutations'."
+            },
+            "inputs": {
+              "type": "object",
+              "description": "Optional structured inputs (S3 keys, sequences, SMILES, parameter overrides). BioMate will merge these with whatever it extracts from `goal`.",
+              "additionalProperties": true
+            },
+            "experiment_id": {
+              "type": "string",
+              "description": "Optional experiment to attach this run to (from recall_memory or create_experiment)."
+            },
+            "stream": {
+              "type": "boolean",
+              "description": "Emit progress notifications during execution. Default true. Set false for hosts without notification support (then poll get_run).",
+              "default": true
+            }
+          },
+          "required": [
+            "goal"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "search_workflow",
+        "description": "Search the BioMate workflow catalog (2,455 indexed workflows across 34 domains) by natural language. Returns ranked workflow cards with id, name, domain, one-line description, and estimated AWS Batch cost. Use this when the user wants to pick a workflow explicitly; otherwise prefer biomate_session.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string",
+              "description": "Natural language description of the analysis."
+            },
+            "limit": {
+              "type": "integer",
+              "description": "Max results (default 5, max 20).",
+              "default": 5
+            },
+            "domain": {
+              "type": "string",
+              "description": "Optional domain filter: transcriptomics, genomics, proteomics, drug_discovery, cryo_em, etc."
+            }
+          },
+          "required": [
+            "query"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "get_workflow_spec",
+        "description": "Return the full specification for a workflow: required + optional parameters (with types and allowed values), default QC profile and thresholds, expected input files, estimated cost and runtime, and any license requirements. Call this before run_workflow when the user wants explicit parameter control.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "workflow_id": {
+              "type": "string",
+              "description": "Workflow ID from search_workflow."
+            }
+          },
+          "required": [
+            "workflow_id"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "run_workflow",
+        "description": "Execute a specific BioMate workflow on AWS Batch with explicit parameters. Returns a run_id immediately. If stream=true, also emits progress notifications until the run terminates (same events as biomate_session). Use biomate_session instead when the user gave you a natural-language goal.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "workflow_id": {
+              "type": "string",
+              "description": "Workflow ID from search_workflow."
+            },
+            "params": {
+              "type": "object",
+              "description": "Parameter dict. Required params come from get_workflow_spec.",
+              "additionalProperties": true
+            },
+            "experiment_id": {
+              "type": "string",
+              "description": "Optional experiment to attach to."
+            },
+            "stream": {
+              "type": "boolean",
+              "description": "Emit progress notifications while running. Default false.",
+              "default": false
+            }
+          },
+          "required": [
+            "workflow_id"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "get_run",
+        "description": "Return everything about a run in one call: status (pending|running|completed|failed), per-phase and per-step progress with timestamps, output files with download URLs, structured findings, QC gate results, and any auto-loop remediations applied. Replaces get_run_status + get_run_results + step-level findings polling.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "run_id": {
+              "type": "string",
+              "description": "Run ID."
+            },
+            "include_findings": {
+              "type": "boolean",
+              "description": "Include structured findings cards (default true).",
+              "default": true
+            }
+          },
+          "required": [
+            "run_id"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "cancel_run",
+        "description": "Cancel a running or queued BioMate workflow on AWS Batch.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "run_id": {
+              "type": "string",
+              "description": "Run ID to cancel."
+            }
+          },
+          "required": [
+            "run_id"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "list_runs",
+        "description": "List the user's recent runs with status and timestamps. Filter by status or experiment.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "limit": {
+              "type": "integer",
+              "description": "Max runs to return (default 10).",
+              "default": 10
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "all",
+                "running",
+                "completed",
+                "failed",
+                "pending"
+              ],
+              "default": "all"
+            },
+            "experiment_id": {
+              "type": "string",
+              "description": "Optional experiment filter."
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "preview_file",
+        "description": "Render a server-side preview of an output file (FASTA, VCF, CSV/TSV, image, PDF). Returns markdown + optional thumbnail PNG. Use this to show the user what an output looks like without downloading multi-GB files. For input QC of files the user is about to upload, prefer biomate_session (it runs a real QC workflow).",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "s3_key": {
+              "type": "string",
+              "description": "S3 key (s3://bucket/path) from get_run output_files."
+            },
+            "run_id": {
+              "type": "string",
+              "description": "Optional run_id for context-aware parsing."
+            },
+            "max_rows": {
+              "type": "integer",
+              "description": "For tabular files (default 100).",
+              "default": 100
+            }
+          },
+          "required": [
+            "s3_key"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "export_report",
+        "description": "Render a publication-ready report for a completed run as PDF or markdown. Includes the methods section, QC audit trail, structured findings, and figures. This is what users need for IND submissions, CRO compliance packages, and publication supplementary materials.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "run_id": {
+              "type": "string",
+              "description": "Completed run ID."
+            },
+            "format": {
+              "type": "string",
+              "enum": [
+                "pdf",
+                "markdown",
+                "docx"
+              ],
+              "default": "pdf"
+            },
+            "sections": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "methods",
+                  "qc",
+                  "findings",
+                  "figures",
+                  "appendix"
+                ]
+              },
+              "description": "Which sections to include (default: all)."
+            }
+          },
+          "required": [
+            "run_id"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "analyze_results",
+        "description": "Ask BioMate's AI to interpret a completed run. Returns natural-language analysis: key findings, quality assessment, scientific interpretation, recommended next steps. Use after get_run when the user asks 'what does this mean?'.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "run_id": {
+              "type": "string",
+              "description": "Completed run ID."
+            },
+            "question": {
+              "type": "string",
+              "description": "Optional focused question."
+            }
+          },
+          "required": [
+            "run_id"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "explain_error",
+        "description": "Diagnose a failed run. Returns the likely root cause (genome mismatch, missing input, OOM, container pull failure, etc.) and the specific fix. Often the next step is run_workflow with corrected params.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "run_id": {
+              "type": "string",
+              "description": "Failed run ID."
+            },
+            "error_log": {
+              "type": "string",
+              "description": "Optional pasted error log."
+            }
+          },
+          "required": [
+            "run_id"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "query_database",
+        "description": "Query a biological/chemical database by accession or name. Supported: uniprot, pdb, alphafold, ncbi_gene, dbsnp, clinvar, gnomad, kegg, reactome, chebi, pubchem, hpo, omim, string.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "database": {
+              "type": "string",
+              "enum": [
+                "uniprot",
+                "pdb",
+                "alphafold",
+                "ncbi_gene",
+                "dbsnp",
+                "clinvar",
+                "gnomad",
+                "kegg",
+                "reactome",
+                "chebi",
+                "pubchem",
+                "hpo",
+                "omim",
+                "string"
+              ]
+            },
+            "query": {
+              "type": "string",
+              "description": "Accession, gene symbol, or compound name."
+            }
+          },
+          "required": [
+            "database",
+            "query"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "recall_memory",
+        "description": "Retrieve relevant prior context for the current goal: past runs on similar inputs, validated procedures, findings tagged by the user, learned parameter preferences. Call before biomate_session for repeat users \u2014 it dramatically improves param auto-fill and avoids re-running work.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string",
+              "description": "What to recall \u2014 usually the user's goal."
+            },
+            "scope": {
+              "type": "string",
+              "enum": [
+                "runs",
+                "findings",
+                "procedures",
+                "all"
+              ],
+              "default": "all"
+            },
+            "limit": {
+              "type": "integer",
+              "default": 5
+            }
+          },
+          "required": [
+            "query"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "upload_file",
+        "description": "Get a one-shot signed S3 PUT URL so the host can upload a local file directly to BioMate's data plane without proxying bytes through the chat transport. Returns the s3_key to use in subsequent tool calls. For files >5MB this is mandatory; for small text payloads, inline strings are fine.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "filename": {
+              "type": "string",
+              "description": "Original filename (sets content-type and extension)."
+            },
+            "size_bytes": {
+              "type": "integer",
+              "description": "File size for quota check."
+            },
+            "content_type": {
+              "type": "string",
+              "description": "MIME type (auto-detected from filename if omitted)."
+            }
+          },
+          "required": [
+            "filename"
+          ]
+        }
+      }
+    }
+  ],
+  "backend_routes": [
+    {
+      "name": "biomate_session",
+      "method": "POST",
+      "path": "/api/open-claw/stream",
+      "streaming": true
+    },
+    {
+      "name": "search_workflow",
+      "method": "POST",
+      "path": "/api/workflows/search",
+      "streaming": false
+    },
+    {
+      "name": "get_workflow_spec",
+      "method": "GET",
+      "path": "/api/workflows/spec",
+      "streaming": false
+    },
+    {
+      "name": "run_workflow",
+      "method": "POST",
+      "path": "/api/workflows/execute",
+      "streaming": true
+    },
+    {
+      "name": "get_run",
+      "method": "GET",
+      "path": "/api/workflows/runs/{run_id}",
+      "streaming": false
+    },
+    {
+      "name": "cancel_run",
+      "method": "POST",
+      "path": "/api/workflows/runs/{run_id}/cancel",
+      "streaming": false
+    },
+    {
+      "name": "list_runs",
+      "method": "GET",
+      "path": "/api/workflows/runs",
+      "streaming": false
+    },
+    {
+      "name": "preview_file",
+      "method": "POST",
+      "path": "/api/files/preview",
+      "streaming": false
+    },
+    {
+      "name": "export_report",
+      "method": "POST",
+      "path": "/api/workflows/runs/{run_id}/findings/report",
+      "streaming": false
+    },
+    {
+      "name": "analyze_results",
+      "method": "POST",
+      "path": "/api/workflows/runs/{run_id}/ai/analyze",
+      "streaming": false
+    },
+    {
+      "name": "explain_error",
+      "method": "POST",
+      "path": "/api/workflows/explain_error",
+      "streaming": false
+    },
+    {
+      "name": "query_database",
+      "method": "POST",
+      "path": "/api/databases/query",
+      "streaming": false
+    },
+    {
+      "name": "recall_memory",
+      "method": "POST",
+      "path": "/api/memory/relevant",
+      "streaming": false
+    },
+    {
+      "name": "upload_file",
+      "method": "POST",
+      "path": "/api/uploads/signed_url",
+      "streaming": false
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "biomate": {
+      "command": "npx",
+      "args": ["-y", "@biomate/mcp-server"],
+      "env": {
+        "BIOMATE_API_BASE": "https://api.biomate.ai",
+        "BIOMATE_REFRESH_TOKEN": "<REPLACE_WITH_TOKEN_FROM_https://biomate.ai/account/connectors/claude-code>"
+      }
+    }
+  }
+}

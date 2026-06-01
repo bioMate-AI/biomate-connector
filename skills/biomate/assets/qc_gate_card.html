@@ -1,0 +1,57 @@
+<!--
+  BioMate QC gate card — server-renderable HTML
+
+  Variables (template placeholders, substituted by /api/files/preview or
+  /api/workflows/runs/:id/qc-card):
+    {{metric}}        e.g. "hERG"
+    {{value}}         measured value, formatted
+    {{threshold}}     gate threshold
+    {{verdict}}       "halt" | "advisory" | "pass"
+    {{verdict_color}} "#dc2626" | "#f59e0b" | "#16a34a"
+    {{view_url}}      deep link into the live BioMate panel
+
+  Used by:
+    - the MCP server when it embeds a rendered card in a tool-result attachment
+    - the Skill when assets/qc_gate_card.html is referenced for the file-display capability
+-->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>QC gate · {{metric}}</title>
+<style>
+  body { font-family: -apple-system, "Segoe UI", system-ui, sans-serif; margin: 0; padding: 16px; background: #f8fafc; }
+  .card { background: #fff; border: 1px solid #e5e7eb; border-left: 4px solid {{verdict_color}}; border-radius: 8px; padding: 16px 20px; max-width: 480px; }
+  .head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px; }
+  .metric { font-weight: 600; font-size: 14px; color: #111827; letter-spacing: 0.02em; text-transform: uppercase; }
+  .verdict { font-weight: 700; font-size: 13px; color: {{verdict_color}}; text-transform: uppercase; }
+  .nums { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .num { display: flex; flex-direction: column; gap: 2px; }
+  .num .label { font-size: 11px; color: #6b7280; }
+  .num .value { font-size: 22px; font-weight: 700; color: #111827; font-variant-numeric: tabular-nums; }
+  .num.measured .value { color: {{verdict_color}}; }
+  .footer { margin-top: 14px; font-size: 12px; }
+  .footer a { color: #2563eb; text-decoration: none; }
+  .footer a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="head">
+      <div class="metric">{{metric}}</div>
+      <div class="verdict">{{verdict}}</div>
+    </div>
+    <div class="nums">
+      <div class="num measured">
+        <span class="label">Measured</span>
+        <span class="value">{{value}}</span>
+      </div>
+      <div class="num">
+        <span class="label">Threshold</span>
+        <span class="value">{{threshold}}</span>
+      </div>
+    </div>
+    <div class="footer"><a href="{{view_url}}">Open in BioMate panel →</a></div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,110 @@
+{
+  "_comment": "BioMate MCP server configuration. The canonical server is at backend/mcp/biomate_mcp_server.py (v1.1.0).",
+  "name": "biomate",
+  "version": "1.1.0",
+  "description": "BioMate scientific workflow platform — 2,100+ bioinformatics pipelines via MCP",
+  "protocol_version": "2024-11-05",
+  "transport": ["stdio"],
+  "server_script": "backend/mcp/biomate_mcp_server.py",
+
+  "tools": [
+    {
+      "name": "chat",
+      "description": "Primary interface: natural-language → BioMate AI (workflow selection, param fill, execution)",
+      "category": "ai"
+    },
+    {
+      "name": "search_workflows",
+      "description": "Full-text search of 2,100+ workflow registry entries",
+      "category": "discovery"
+    },
+    {
+      "name": "get_workflow_params",
+      "description": "Return typed parameter schema (nextflow_schema.json) for a workflow",
+      "category": "discovery"
+    },
+    {
+      "name": "list_runs",
+      "description": "List recent workflow runs with status",
+      "category": "execution"
+    },
+    {
+      "name": "get_run_status",
+      "description": "Poll status of a running workflow execution",
+      "category": "execution"
+    },
+    {
+      "name": "get_output_files",
+      "description": "List output files from a completed run with download URLs",
+      "category": "execution"
+    },
+    {
+      "name": "upload_file",
+      "description": "Upload a local file to BioMate dataset store for workflow input",
+      "category": "data"
+    },
+    {
+      "name": "research_query",
+      "description": "Search PubMed / Semantic Scholar and return synthesised answer with citations",
+      "category": "literature"
+    },
+    {
+      "name": "rerun_workflow",
+      "description": "Resume a failed run using Nextflow -resume (caches completed tasks)",
+      "category": "execution"
+    }
+  ],
+
+  "auth": {
+    "type": "api_key",
+    "env_var": "BIOMATE_API_TOKEN",
+    "header": "Authorization",
+    "scheme": "Bearer",
+    "note": "Generate at BioMate → Settings → API Keys, or copy JWT from browser dev-tools"
+  },
+
+  "environment": {
+    "BIOMATE_URL": {
+      "description": "BioMate server URL",
+      "default": "http://localhost:5000",
+      "example": "https://app.biomate.ai"
+    },
+    "BIOMATE_API_TOKEN": {
+      "description": "User Bearer token (Settings → API Keys)",
+      "required": true
+    },
+    "BIOMATE_MCP_DEBUG": {
+      "description": "Set to 1 for verbose stderr logging",
+      "default": "0"
+    }
+  },
+
+  "claude_desktop_config_example": {
+    "_note": "Add this block to ~/Library/Application Support/Claude/claude_desktop_config.json",
+    "mcpServers": {
+      "biomate": {
+        "command": "python3",
+        "args": ["/path/to/biomate/backend/mcp/biomate_mcp_server.py"],
+        "env": {
+          "BIOMATE_URL": "http://localhost:5000",
+          "BIOMATE_API_TOKEN": "<your-token-here>"
+        }
+      }
+    }
+  },
+
+  "claude_code_add_command": "claude mcp add biomate -- python3 /path/to/biomate/backend/mcp/biomate_mcp_server.py",
+
+  "related_mcp_servers": {
+    "alphafold": "backend/auto_update/mcp_servers/AlphaFold-MCP-Server/build/index.js",
+    "chai1": "backend/auto_update/mcp_servers/chai1_mcp_server.py",
+    "pubmed": "backend/biomni_workflows/galaxy/tools/biomni/_lib/example_mcp_tools/pubmed_mcp.py"
+  },
+
+  "lab_automation": {
+    "note": "PyLabRobot (Hamilton STAR) integration in backend/biomni_workflows/galaxy/tools/biomni/_lib/lab_automation.py",
+    "supported_robots": ["Hamilton STAR", "Hamilton STARlet"],
+    "doc_tool": "get_pylabrobot_documentation_liquid",
+    "test_tool": "test_pylabrobot_script"
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "name": "@biomate/connect",
+  "version": "0.1.0",
+  "description": "One-line installer that connects BioMate to Claude Code, Claude Desktop, Cursor, Codex, and ChatGPT via OAuth 2.1 + PKCE.",
+  "bin": {
+    "biomate-connect": "./dist/cli.js"
+  },
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": ["biomate", "mcp", "claude", "cursor", "codex", "chatgpt", "bioinformatics"],
+  "author": "BioMate AI",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bioMate-AI/biomate-connectors.git",
+    "directory": "installer"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "keytar": "^7.9.0",
+    "open": "^9.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.4.0",
+    "vitest": "^1.0.0"
+  },
+  "files": ["dist", "README.md"]
+}

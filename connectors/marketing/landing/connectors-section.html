@@ -1,0 +1,145 @@
+<!--
+  Drop this <section> block into biomate.ai/ between the hero and the
+  pipeline showcase. Tailwind classes assume the existing site setup
+  (oklch tokens + tailwind.config.js with `font-sans` and `font-mono`).
+-->
+<section id="connectors" class="bg-neutral-50 py-24">
+  <div class="mx-auto max-w-6xl px-6">
+
+    <!-- Header -->
+    <div class="mb-16 text-center">
+      <p class="mb-3 text-sm font-semibold uppercase tracking-wider text-emerald-700">
+        Connectors
+      </p>
+      <h2 class="mb-4 text-4xl font-bold tracking-tight text-neutral-900 sm:text-5xl">
+        Run BioMate from anywhere you already work.
+      </h2>
+      <p class="mx-auto max-w-2xl text-lg text-neutral-600">
+        Six surfaces. One OAuth flow. Same 2,455 indexed workflows, same
+        AWS Batch execution engine, same QC gates and methods reports.
+      </p>
+    </div>
+
+    <!-- Install card -->
+    <div class="mx-auto mb-16 max-w-3xl rounded-2xl bg-neutral-900 p-8 shadow-xl">
+      <div class="mb-4 flex items-center gap-2 text-xs font-medium text-neutral-400">
+        <span class="h-3 w-3 rounded-full bg-red-500"></span>
+        <span class="h-3 w-3 rounded-full bg-yellow-500"></span>
+        <span class="h-3 w-3 rounded-full bg-green-500"></span>
+        <span class="ml-4">terminal</span>
+      </div>
+      <pre class="overflow-x-auto font-mono text-base text-emerald-300"><code><span class="text-neutral-500">$</span> npx @biomate/connect claude-code
+<span class="text-neutral-400">Opening browser to authorize Claude Code…</span>
+<span class="text-neutral-400">Connected. Refresh token saved to ~/.claude.json</span>
+✓ Claude Code connected. Restart to pick up the new MCP server.</code></pre>
+    </div>
+
+    <!-- Surfaces grid -->
+    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+
+      <a href="/connectors/claude-code" class="group rounded-xl border border-neutral-200 bg-white p-6 transition hover:border-emerald-500 hover:shadow-md">
+        <div class="mb-3 flex items-center justify-between">
+          <h3 class="text-lg font-semibold text-neutral-900">Claude Code</h3>
+          <span class="text-xs font-medium text-emerald-700">Live</span>
+        </div>
+        <p class="mb-4 text-sm text-neutral-600">
+          Terminal-native MCP. Streaming progress events render inline.
+        </p>
+        <code class="block rounded bg-neutral-100 px-3 py-2 text-xs text-neutral-700">npx @biomate/connect claude-code</code>
+      </a>
+
+      <a href="/connectors/claude-desktop" class="group rounded-xl border border-neutral-200 bg-white p-6 transition hover:border-emerald-500 hover:shadow-md">
+        <div class="mb-3 flex items-center justify-between">
+          <h3 class="text-lg font-semibold text-neutral-900">Claude Desktop</h3>
+          <span class="text-xs font-medium text-emerald-700">Live</span>
+        </div>
+        <p class="mb-4 text-sm text-neutral-600">
+          Same tools, desktop UI. Thumbnails render in chat.
+        </p>
+        <code class="block rounded bg-neutral-100 px-3 py-2 text-xs text-neutral-700">npx @biomate/connect claude-desktop</code>
+      </a>
+
+      <a href="/connectors/cursor" class="group rounded-xl border border-neutral-200 bg-white p-6 transition hover:border-emerald-500 hover:shadow-md">
+        <div class="mb-3 flex items-center justify-between">
+          <h3 class="text-lg font-semibold text-neutral-900">Cursor</h3>
+          <span class="text-xs font-medium text-emerald-700">Live</span>
+        </div>
+        <p class="mb-4 text-sm text-neutral-600">
+          Chat the pipeline; pipe results into your editor buffer.
+        </p>
+        <code class="block rounded bg-neutral-100 px-3 py-2 text-xs text-neutral-700">npx @biomate/connect cursor</code>
+      </a>
+
+      <a href="/connectors/codex" class="group rounded-xl border border-neutral-200 bg-white p-6 transition hover:border-emerald-500 hover:shadow-md">
+        <div class="mb-3 flex items-center justify-between">
+          <h3 class="text-lg font-semibold text-neutral-900">Codex CLI</h3>
+          <span class="text-xs font-medium text-emerald-700">Live</span>
+        </div>
+        <p class="mb-4 text-sm text-neutral-600">
+          Terse interface, same engine. Model polls for progress.
+        </p>
+        <code class="block rounded bg-neutral-100 px-3 py-2 text-xs text-neutral-700">npx @biomate/connect codex</code>
+      </a>
+
+      <a href="/connectors/chatgpt" class="group rounded-xl border border-neutral-200 bg-white p-6 transition hover:border-emerald-500 hover:shadow-md">
+        <div class="mb-3 flex items-center justify-between">
+          <h3 class="text-lg font-semibold text-neutral-900">ChatGPT</h3>
+          <span class="text-xs font-medium text-emerald-700">Live</span>
+        </div>
+        <p class="mb-4 text-sm text-neutral-600">
+          Custom GPT with OAuth Actions. One-tap install from the store.
+        </p>
+        <a href="https://chatgpt.com/g/g-biomate" class="block rounded bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700 hover:bg-emerald-100">Open BioMate GPT →</a>
+      </a>
+
+      <a href="/connectors/wechat" class="group rounded-xl border border-neutral-200 bg-white p-6 transition hover:border-emerald-500 hover:shadow-md">
+        <div class="mb-3 flex items-center justify-between">
+          <h3 class="text-lg font-semibold text-neutral-900">Open Claw / WeChat</h3>
+          <span class="text-xs font-medium text-emerald-700">Live</span>
+        </div>
+        <p class="mb-4 text-sm text-neutral-600">
+          Hosted WeChat bridge. Multilingual; methods reports in Chinese.
+        </p>
+        <code class="block rounded bg-neutral-100 px-3 py-2 text-xs text-neutral-700">npx @biomate/connect open-claw</code>
+      </a>
+
+    </div>
+
+    <!-- The pitch -->
+    <div class="mt-16 grid gap-8 lg:grid-cols-3">
+      <div>
+        <div class="mb-3 text-3xl">🔁</div>
+        <h3 class="mb-2 text-lg font-semibold text-neutral-900">One OAuth, six surfaces</h3>
+        <p class="text-sm text-neutral-600">
+          OAuth 2.1 + PKCE. Per-surface scopes, individually revocable. No
+          shared secrets, no surface lock-in.
+        </p>
+      </div>
+      <div>
+        <div class="mb-3 text-3xl">⚡</div>
+        <h3 class="mb-2 text-lg font-semibold text-neutral-900">Streaming progress</h3>
+        <p class="text-sm text-neutral-600">
+          MCP <code>notifications/progress</code> on hosts that support it
+          (Claude Code, Cursor). Paired <code>poll_run</code> tool everywhere
+          else. Same event shape, same backend.
+        </p>
+      </div>
+      <div>
+        <div class="mb-3 text-3xl">🧬</div>
+        <h3 class="mb-2 text-lg font-semibold text-neutral-900">2,455 real workflows</h3>
+        <p class="text-sm text-neutral-600">
+          All of nf-core, CryoSPARC, AlphaFold/ESMFold, OpenMM, GROMACS,
+          Vina, Bioconductor, Seurat, scanpy. Real AWS Batch execution.
+        </p>
+      </div>
+    </div>
+
+    <!-- CTA -->
+    <div class="mt-16 text-center">
+      <a href="/connectors" class="inline-block rounded-lg bg-neutral-900 px-6 py-3 text-base font-semibold text-white transition hover:bg-neutral-800">
+        See all six connectors →
+      </a>
+    </div>
+
+  </div>
+</section>
