@@ -443,6 +443,135 @@ These queries work on all four platforms:
 
 ---
 
+## Platform 5 — ChatGPT (Custom GPT + Actions)
+
+### What it does
+A ChatGPT custom GPT exposes BioMate via OpenAI Actions. GPT-4 calls BioMate tools directly when it decides to — no slash commands, no explicit invocation. The user just asks a scientific question and ChatGPT routes it to BioMate automatically.
+
+### One-time setup
+
+**A. Deploy the Actions adapter server**
+```bash
+export BIOMATE_API_URL=http://localhost:5000
+export BIOMATE_API_KEY=your_key_here
+export BIOMATE_DEEP_LINK_BASE=https://app.biomate.ai
+
+python3 backend/lib/integrations/chatgpt_adapter.py --port 8093
+```
+
+With ngrok:
+```bash
+ngrok http 8093
+# Note the https URL, e.g. https://xyz.ngrok.io
+```
+
+**B. Create the Custom GPT**
+1. Go to https://chat.openai.com → Explore GPTs → Create a GPT
+2. In the **Configure** tab, paste the fields from `connectors/chatgpt/gpt_config.md`:
+   - Name, Description, Instructions, Conversation starters
+3. Under **Actions** → Create new action:
+   - Click "Import from URL" and paste: `https://xyz.ngrok.io/tools/openapi.json`  
+     — or upload `connectors/chatgpt/openapi.json` directly after editing `servers[0].url`
+   - Authentication: choose **OAuth** and fill in BioMate's OAuth endpoints:
+     - Authorization URL: `https://biomate.ai/oauth/authorize`
+     - Token URL: `https://biomate.ai/oauth/token`
+     - Client ID / Secret: from your BioMate OAuth app registration
+4. Capabilities: turn on **Code Interpreter**, turn off Web Browsing and DALL·E
+5. Save and **Publish** (visibility: "Only me" for testing)
+
+### Test commands
+
+Open the BioMate GPT in ChatGPT.
+
+**Test 1 — ADMET screening (calls biomate_session):**
+```
+Screen aspirin and caffeine for ADMET properties including hERG and CYP3A4
+```
+Expected:
+- ChatGPT shows "Used BioMate · Run real bioinformatics..."
+- Returns AI answer with ADMET findings
+- Includes "Run in BioMate" link
+
+**Test 2 — workflow browse (calls search_workflow):**
+```
+What CryoEM workflows do you have?
+```
+Expected: ChatGPT calls `search_workflow`, lists available CryoEM workflows from BioMate's catalog.
+
+**Test 3 — RNA-seq (calls biomate_session with specific goal):**
+```
+Run differential expression analysis on my RNA-seq data. Files are in s3://my-bucket/fastq/, human genome, paired-end reads.
+```
+Expected: `biomate_session` called with the full goal including S3 path and organism.
+
+**Test 4 — run status (calls get_run):**
+```
+What's the status of run abc-123?
+```
+Expected: ChatGPT calls `get_run`, reports run status.
+
+**Test 5 — full conversation:**
+```
+Turn 1: Screen aspirin for ADMET
+Turn 2: What's the hERG IC50?
+Turn 3: Compare it to ibuprofen
+```
+Expected: Each turn uses the context from previous ones; Turn 3 calls `biomate_session` for ibuprofen.
+
+### Verify tool calls are reaching the adapter
+
+Check adapter server logs:
+```
+POST /tools/biomate_session  200  0.9s
+POST /tools/search_workflow  200  0.3s
+```
+
+Direct curl test (bypasses ChatGPT, hits adapter directly):
+```bash
+curl -s -X POST https://xyz.ngrok.io/tools/biomate_session \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer your_biomate_api_key" \
+  -d '{"goal": "Screen aspirin for ADMET properties"}' | python3 -m json.tool
+```
+Expected:
+```json
+{
+  "isError": false,
+  "content": [{"type": "text", "text": "{\"answer\": \"...\", \"workflow_name\": \"admet_screening\", ...}"}],
+  "view_url": "https://app.biomate.ai?workflow=admet_screening"
+}
+```
+
+### Run the automated GPT-4 test (no GPT Builder needed)
+
+The test suite includes 5 live GPT-4 function-calling tests that verify tool selection end-to-end using the OpenAI API directly:
+```bash
+cd /path/to/biomate-connectors-v2
+OPENAI_API_KEY=your_openai_key python3 -m unittest backend.tests.test_chatgpt_connector.TestGPT4Live -v
+```
+
+Expected output (all 5 pass):
+```
+test_admet_query_calls_biomate_session ... ok
+test_browse_query_calls_search_workflow ... ok
+test_full_roundtrip_with_mock_biomate ... ok
+test_rnaseq_query_goal_contains_rnaseq ... ok
+test_run_status_query_calls_get_run ... ok
+[GPT-4 final answer]: The ADMET screening for aspirin has been completed...
+```
+
+### Troubleshooting
+
+| Symptom | Fix |
+|---|---|
+| "Actions schema validation failed" in GPT Builder | Edit `servers[0].url` in openapi.json to your ngrok URL before importing |
+| ChatGPT doesn't call the tool | Rephrase as a specific analysis request; check GPT instructions include "use biomate_session" |
+| 401 from adapter | OAuth token not passed correctly; test with `BIOMATE_API_KEY` curl first |
+| GPT calls tool but gets empty answer | BioMate server down or API key wrong; check `curl` test against `/api/chat/stream` |
+| ngrok tunnel expired | Restart ngrok, update `servers[0].url` in GPT Builder Actions |
+
+---
+
 ## Running Unit Tests Locally
 
 All connector unit tests use mock SSE servers — no real BioMate server needed.
@@ -459,10 +588,17 @@ python3 -m unittest tests.test_slack_bot -v
 # Coze plugin (18 tests)
 python3 -m unittest backend.tests.test_coze_plugin -v
 
+# ChatGPT adapter unit tests (11 tests, no OpenAI key)
+python3 -m unittest backend.tests.test_chatgpt_connector.TestAdapterUnit -v
+
+# ChatGPT live GPT-4 tests (5 tests, requires OPENAI_API_KEY)
+OPENAI_API_KEY=your_key python3 -m unittest backend.tests.test_chatgpt_connector.TestGPT4Live -v
+
 # MCP E2E (requires live BioMate server + API key)
 BIOMATE_API_URL=http://localhost:5000 \
 BIOMATE_API_KEY=your_key_here \
 python3 tests/test_mcp_e2e.py --search-only
 ```
 
-Expected totals: **62 unit tests pass** (11 + 33 + 18).
+Expected totals: **73 unit tests pass** (11 + 33 + 18 + 11 ChatGPT unit).  
+**+5 live GPT-4 tests** with `OPENAI_API_KEY` set (verified passing 2026-06-02).
