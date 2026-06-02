@@ -1,0 +1,117 @@
+openapi: 3.0.1
+info:
+  title: BioMate Scientific AI
+  description: >
+    Route biology, drug discovery, and bioinformatics questions through
+    BioMate's AI workflow engine. BioMate selects the best computational
+    workflow (ADMET screening, RNA-seq, WGS, CryoEM, PBPK, and 2,400+
+    others), explains the plan in plain language, and provides a one-click
+    link to run it on BioMate's cloud infrastructure.
+  version: 1.0.0
+servers:
+  - url: https://YOUR_DOMAIN/coze-plugin
+    description: Production BioMate Coze plugin server
+
+paths:
+  /health:
+    get:
+      operationId: health_check
+      summary: Plugin health check
+      description: Returns 200 OK when the plugin server is running. Used by the Coze console during plugin validation.
+      responses:
+        "200":
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  /query:
+    post:
+      operationId: biomate_query
+      summary: Ask BioMate a scientific question
+      description: >
+        Send a natural-language biology or drug-discovery question to BioMate's
+        AI engine. BioMate will:
+          1. Interpret the scientific intent
+          2. Select the most appropriate computational workflow
+          3. Return a plain-language explanation and a "Run in BioMate" link
+
+        Supports multi-turn conversation via the optional session_id field.
+        Pass the session_id returned from a previous call to continue context.
+
+        Example queries:
+          - "Screen aspirin and caffeine for ADMET properties"
+          - "Run differential expression analysis on RNA-seq data from TCGA"
+          - "Predict the 3D structure of this protein: MKTIIALSYIFCLVFA..."
+          - "Design a Phase I dose escalation trial for compound X"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - query
+              properties:
+                query:
+                  type: string
+                  description: >
+                    The scientific question or analysis task in plain language.
+                    Be specific about: molecule names or SMILES, organism/genome,
+                    data type (RNA-seq, WGS, proteomics, etc.), and goal.
+                  example: "Screen aspirin (SMILES: CC(=O)Oc1ccccc1C(=O)O) for hERG inhibition and CYP3A4 metabolism"
+                session_id:
+                  type: string
+                  description: >
+                    Optional. Pass the session_id from a previous response to
+                    continue a multi-turn conversation. Omit for a new session.
+                  example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        "200":
+          description: BioMate response with AI answer and optional workflow suggestion
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  answer:
+                    type: string
+                    description: BioMate's AI-generated explanation and analysis plan
+                  workflow_name:
+                    type: string
+                    description: >
+                      The computational workflow BioMate selected (e.g.
+                      "admet_screening", "nfcore_rnaseq"). Present only when
+                      a runnable workflow was identified.
+                  view_url:
+                    type: string
+                    description: >
+                      Deep link to open this workflow in BioMate and run it
+                      with one click. Present only when workflow_name is set.
+                    example: "https://app.biomate.ai?workflow=admet_screening"
+                  session_id:
+                    type: string
+                    description: Session identifier. Pass back in the next call to continue context.
+        "400":
+          description: Missing or invalid query field
+        "401":
+          description: Missing or invalid plugin authentication key
+
+components:
+  securitySchemes:
+    pluginKey:
+      type: apiKey
+      in: header
+      name: X-BioMate-Plugin-Key
+      description: >
+        Service-level key set in the Coze plugin console under
+        "Authentication" → "Service Level" → header name X-BioMate-Plugin-Key.
+        Set the value to match the COZE_PLUGIN_SECRET env var on the plugin server.
+
+security:
+  - pluginKey: []
