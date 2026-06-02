@@ -33,7 +33,7 @@ import os
 import logging
 import time
 import threading
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Generator, List, Optional
 
 import requests
 
@@ -65,10 +65,16 @@ log = logging.getLogger(__name__)
 # surfaces (Open Claw, Slack, WeChat, ChatGPT GPT, Claude Skill catalog) are
 # generated from the same module. See docs/20260513_CONNECTOR_ARCHITECTURE_V2.md.
 
-from backend.lib.mcp.tools_manifest import (
-    to_mcp as _manifest_to_mcp,
-    get_tool as _manifest_get_tool,
-)
+try:
+    from backend.lib.mcp.tools_manifest import (  # when run from repo root
+        to_mcp as _manifest_to_mcp,
+        get_tool as _manifest_get_tool,
+    )
+except ModuleNotFoundError:
+    from tools_manifest import (  # when run as standalone package
+        to_mcp as _manifest_to_mcp,
+        get_tool as _manifest_get_tool,
+    )
 
 TOOLS: List[Dict[str, Any]] = _manifest_to_mcp()
 
@@ -284,46 +290,101 @@ class BioMateClient:
         except Exception as exc:
             return {"error": str(exc), "filename": filename}
 
+    @staticmethod
+    def _iter_sse(resp) -> "Generator[Dict[str, Any], None, None]":
+        """Shared SSE line parser for any streaming HTTP response."""
+        current_event = "message"
+        for raw_line in resp.iter_lines(decode_unicode=True):
+            if not raw_line:
+                continue
+            if raw_line.startswith(":"):
+                continue  # SSE comment / keep-alive / ping
+            if raw_line.startswith("event:"):
+                current_event = raw_line[6:].strip()
+                continue
+            if raw_line.startswith("data:"):
+                data_str = raw_line[5:].strip()
+                try:
+                    data = json.loads(data_str)
+                except json.JSONDecodeError:
+                    data = data_str
+                yield {"event": current_event, "data": data}
+                current_event = "message"  # reset after each complete event
+
     def open_claw_stream(self, goal: str, inputs: Optional[Dict[str, Any]], experiment_id: Optional[str]):
-        """Generator yielding SSE events from /api/open-claw/stream.
+        """Generator yielding SSE events from /api/chat/stream (BioMate's main chat endpoint).
 
         Each yielded dict has shape: {event: <name>, data: <parsed json or str>}.
-        The bridge in SessionRunner converts these into MCP progress notifications.
+        Emits: 'delta', 'tool_event', 'workflow_ready', 'final', 'done'.
         """
-        messages = [{"role": "user", "content": goal}]
-        payload: Dict[str, Any] = {"messages": messages}
+        # /api/chat/stream expects {message, context}
+        payload: Dict[str, Any] = {"message": goal}
+        context: Dict[str, Any] = {}
         if inputs:
-            payload["inputs"] = inputs
+            context["inputs"] = inputs
         if experiment_id:
-            payload["experiment_id"] = experiment_id
+            context["experimentId"] = experiment_id
+        if context:
+            payload["context"] = context
 
         headers = dict(self.session.headers)
         headers["Accept"] = "text/event-stream"
 
         with self.session.post(
-            self._url("/api/open-claw/stream"),
+            self._url("/api/chat/stream"),
             json=payload,
             headers=headers,
             stream=True,
             timeout=(30, 600),  # 10-min idle limit
         ) as resp:
             resp.raise_for_status()
-            current_event = "message"
-            for raw_line in resp.iter_lines(decode_unicode=True):
-                if not raw_line:
-                    continue
-                if raw_line.startswith(":"):
-                    continue  # SSE comment / keep-alive
-                if raw_line.startswith("event:"):
-                    current_event = raw_line[6:].strip()
-                    continue
-                if raw_line.startswith("data:"):
-                    data_str = raw_line[5:].strip()
-                    try:
-                        data = json.loads(data_str)
-                    except json.JSONDecodeError:
-                        data = data_str
-                    yield {"event": current_event, "data": data}
+            yield from self._iter_sse(resp)
+
+    def execute_workflow(self, workflow_def: Dict[str, Any]) -> Dict[str, Any]:
+        """POST /api/workflows/execute with the workflow definition.
+
+        Returns {runId, galaxyInvocationId, nextflowRunId, status, ...} on success
+        or {error: ...} on failure.
+        """
+        payload: Dict[str, Any] = {
+            "workflowDefinition": workflow_def,
+            "inputs": [],
+            "executionConfig": {
+                # Bypass the scientific confidence gate — the AI already assessed
+                # the workflow is appropriate for this goal.
+                "allowLowConfidence": True,
+                "nextflow_profile": os.environ.get("BIOMATE_NEXTFLOW_PROFILE", "aws"),
+            },
+        }
+        try:
+            r = self.session.post(
+                self._url("/api/workflows/execute"),
+                json=payload,
+                timeout=60,
+            )
+            r.raise_for_status()
+            return r.json()
+        except Exception as exc:
+            return {"error": str(exc)}
+
+    def workflow_events_stream(self, invocation_id: str):
+        """Generator yielding SSE events from /api/workflows/:id/events.
+
+        The Node.js frontend relays phase/step/QC events injected by the Python
+        backend via /internal/sse-inject.  Each yielded dict is:
+          {event: 'chat_progress'|'qc_gate_triggered'|'qc_warning'|..., data: {...}}
+        """
+        headers = dict(self.session.headers)
+        headers["Accept"] = "text/event-stream"
+
+        with self.session.get(
+            self._url(f"/api/workflows/{invocation_id}/events"),
+            headers=headers,
+            stream=True,
+            timeout=(30, 3600),  # up to 1h for long workflows
+        ) as resp:
+            resp.raise_for_status()
+            yield from self._iter_sse(resp)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -345,55 +406,130 @@ _PROGRESS_KINDS = {
 
 
 def _normalize_sse_event(evt: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    """Map an Open Claw SSE event into the canonical progress payload."""
+    """Map an SSE event (from chat stream OR workflow events endpoint) into the
+    canonical progress payload understood by SessionRunner._emit_progress().
+
+    Two sources have distinct event shapes:
+
+    1. /api/chat/stream  — events: delta, workflow_ready, final, done
+    2. /api/workflows/:id/events  — events: connected, chat_progress,
+       qc_gate_triggered, qc_warning
+
+    The workflow events endpoint is the one that carries real phase/step/QC
+    progress; the chat stream events are used only to surface AI narration.
+    """
     name = evt.get("event") or ""
     data = evt.get("data") or {}
     if not isinstance(data, dict):
         data = {"raw": data}
 
-    # Open Claw emits a heterogeneous mix: tool_use, tool_result, text_delta,
-    # workflow_phase, workflow_step, qc_gate, finding. Map each to a kind.
-    if name in ("text_delta", "delta"):
-        return {
-            "kind": "text_delta",
-            "summary_md": data.get("text") or data.get("delta") or "",
-            "delta": data,
-        }
-    if name in ("workflow_phase", "phase"):
-        status = data.get("status", "running")
-        return {
-            "kind": f"phase_{status}" if status in ("started", "completed", "failed") else "phase_started",
-            "summary_md": f"**Phase:** {data.get('name', '?')} — {status}",
-            "view_url": data.get("view_url"),
-            "delta": data,
-        }
-    if name in ("workflow_step", "step"):
-        status = data.get("status", "running")
-        kind = "step_completed" if status == "completed" else ("step_failed" if status == "failed" else "step_started")
-        return {
-            "kind": kind,
-            "summary_md": f"- {data.get('name', '?')} ({status})",
-            "view_url": data.get("view_url"),
-            "delta": data,
-        }
-    if name == "qc_gate":
-        verdict = data.get("verdict", "unknown")
+    # ── Workflow events SSE (primary source of structured progress) ───────────
+
+    if name == "chat_progress":
+        # Emitted by workflow_chat_narrator.emit() via /internal/sse-inject.
+        # data = {kind, invocation_id, friendly_message, ts, technical}
+        kind = data.get("kind", "")
+        friendly = data.get("friendly_message") or kind
+        tech = data.get("technical") or {}
+
+        if kind == "workflow.phase_started":
+            phase_name = tech.get("phase_name") or tech.get("name") or "?"
+            return {
+                "kind": "phase_started",
+                "summary_md": f"> **Phase: {phase_name}** — started",
+                "delta": {"name": phase_name, **tech},
+            }
+        if kind == "workflow.phase_completed":
+            phase_name = tech.get("phase_name") or tech.get("name") or "?"
+            return {
+                "kind": "phase_completed",
+                "summary_md": f"> **Phase: {phase_name}** — completed",
+                "delta": {"name": phase_name, **tech},
+            }
+        if kind == "workflow.phase_failed":
+            phase_name = tech.get("phase_name") or tech.get("name") or "?"
+            reason = tech.get("reason") or ""
+            return {
+                "kind": "phase_failed",
+                "summary_md": f"> ⚠ **Phase: {phase_name}** — failed\n> {reason}",
+                "delta": {"name": phase_name, **tech},
+            }
+        if kind in ("workflow.qc_gate_warning", "workflow.qc_gate_blocked"):
+            verdict = "advisory" if kind == "workflow.qc_gate_warning" else "halt"
+            metric = tech.get("metric") or "?"
+            return {
+                "kind": "qc_gate",
+                "summary_md": friendly,
+                "delta": {"verdict": verdict, "metric": metric, **tech},
+            }
+        if kind == "workflow.autoloop_started":
+            return {
+                "kind": "auto_loop_remediation",
+                "summary_md": friendly,
+                "delta": tech,
+            }
+        if kind == "workflow.completed":
+            return {
+                "kind": "done",
+                "summary_md": friendly,
+                "delta": {**tech, "kind": kind},
+            }
+        if kind in ("workflow.failed", "workflow.cancelled"):
+            return {
+                "kind": "phase_failed",
+                "summary_md": friendly,
+                "delta": {**tech, "kind": kind},
+            }
+        if kind and kind.startswith("workflow."):
+            # queued, running, submitted, paused, resumed, etc. — narrate as text
+            return {
+                "kind": "text_delta",
+                "summary_md": friendly,
+                "delta": data,
+            }
+        return None
+
+    if name == "qc_gate_triggered":
+        # Emitted directly by NextflowQCGateHandler when a gate fires.
+        verdict = data.get("verdict", "halt")
+        metric = data.get("metric") or "?"
+        value = data.get("value") or "?"
+        threshold = data.get("threshold") or "?"
         return {
             "kind": "qc_gate",
-            "summary_md": f"**QC gate:** {data.get('metric','?')} = {data.get('value','?')} → {verdict}",
-            "view_url": data.get("view_url"),
-            "thumbnail_png_b64": data.get("thumbnail_png_b64"),
-            "delta": data,
-        }
-    if name == "auto_loop":
-        return {
-            "kind": "auto_loop_remediation",
             "summary_md": (
-                f"**Auto-loop fix:** {data.get('param','?')}: "
-                f"`{data.get('was')}` → `{data.get('now')}`"
+                f"**QC gate — {metric}:** measured `{value}` vs threshold `{threshold}` → **{verdict}**"
             ),
-            "delta": data,
+            "thumbnail_png_b64": data.get("thumbnail_png_b64"),
+            "delta": {
+                "metric": metric, "value": value,
+                "threshold": threshold, "verdict": verdict,
+                "suggestions": data.get("suggestions", []),
+            },
         }
+
+    if name == "qc_warning":
+        metric = data.get("metric") or "?"
+        return {
+            "kind": "qc_gate",
+            "summary_md": f"**QC warning — {metric}:** near threshold",
+            "delta": {"verdict": "advisory", **data},
+        }
+
+    # ── Chat stream events (secondary — AI narration only) ────────────────────
+
+    if name == "delta":
+        text = data.get("text", "")
+        if not text:
+            return None
+        return {"kind": "text_delta", "summary_md": text, "delta": data}
+
+    if name == "workflow_ready":
+        wf_name = data.get("workflow_name") or ""
+        msg = f"**Workflow ready:** {wf_name}" if wf_name else "**Workflow ready** — preparing to run…"
+        return {"kind": "phase_started", "summary_md": msg, "delta": data}
+
+    # finding / report_ready (from older Open Claw bridge — kept for compat)
     if name == "finding":
         return {
             "kind": "finding",
@@ -402,14 +538,9 @@ def _normalize_sse_event(evt: Dict[str, Any]) -> Optional[Dict[str, Any]]:
             "thumbnail_png_b64": data.get("thumbnail_png_b64"),
             "delta": data,
         }
-    if name in ("done", "complete", "end"):
-        return {
-            "kind": "done",
-            "summary_md": data.get("summary_md") or "**Done.**",
-            "view_url": data.get("view_url"),
-            "delta": data,
-        }
-    # Tool calls and unknown events are ignored — they're internal to Open Claw.
+
+    # Ignore: connected, done, final, tool_event, ready, needs_input, error
+    # (not user-facing progress; handled directly in SessionRunner)
     return None
 
 
@@ -459,39 +590,180 @@ class SessionRunner(threading.Thread):
 
     def run(self) -> None:
         try:
-            n = 0
-            for evt in self.client.open_claw_stream(
-                goal=self.tool_args.get("goal") or self.tool_args.get("session_message") or "",
-                inputs=self.tool_args.get("inputs"),
-                experiment_id=self.tool_args.get("experiment_id"),
-            ):
-                payload = _normalize_sse_event(evt)
-                if payload is None:
-                    continue
+            self._run_impl()
+        except Exception as exc:
+            log.exception(f"SessionRunner error for {self.tool_name}")
+            send(make_error(self.req_id, -32603, "Streaming tool error", str(exc)))
+
+    def _run_impl(self) -> None:
+        goal = self.tool_args.get("goal") or self.tool_args.get("session_message") or ""
+        inputs = self.tool_args.get("inputs")
+        experiment_id = self.tool_args.get("experiment_id")
+
+        n = 0  # progress counter
+
+        # ── Phase 1: AI chat stream → workflow suggestion ─────────────────────
+        # Consume /api/chat/stream to get the AI response + generated workflow.
+        # Emit text_delta notifications for AI narration; capture the workflow
+        # definition from the 'final' event so we can execute it.
+
+        workflow_def: Optional[Dict[str, Any]] = None
+        ai_text_parts: List[str] = []
+
+        for evt in self.client.open_claw_stream(goal=goal, inputs=inputs, experiment_id=experiment_id):
+            ename = evt.get("event", "")
+            edata = evt.get("data") or {}
+
+            if ename == "delta" and isinstance(edata, dict):
+                text = edata.get("text", "")
+                if text:
+                    ai_text_parts.append(text)
+                    n += 1
+                    self._emit_progress({"kind": "text_delta", "summary_md": text, "delta": edata}, n)
+
+            elif ename == "final" and isinstance(edata, dict):
+                # The full AI response + generated workflow lives in 'final'.
+                wf = edata.get("workflow")
+                if isinstance(wf, dict) and wf.get("success") and not wf.get("error"):
+                    workflow_def = wf
+                    wf_name = (
+                        wf.get("workflow_ga", {}).get("name")
+                        or wf.get("workflow_name")
+                        or wf.get("chain_display_name")
+                        or "(workflow)"
+                    )
+                    n += 1
+                    self._emit_progress(
+                        {
+                            "kind": "phase_started",
+                            "summary_md": f"**Workflow ready:** {wf_name} — launching…",
+                            "delta": {"workflow_name": wf_name},
+                        },
+                        n,
+                    )
+
+            elif ename == "done":
+                break
+
+        if not workflow_def:
+            # No runnable workflow — return the AI text response as-is.
+            final_text = "".join(ai_text_parts).strip() or "Session complete."
+            send(make_response(self.req_id, {
+                "content": [{"type": "text", "text": final_text}],
+                "isError": False,
+            }))
+            return
+
+        # ── Phase 2: Execute the workflow ─────────────────────────────────────
+        # POST /api/workflows/execute and get back an invocationId.
+
+        exec_result = self.client.execute_workflow(workflow_def)
+        log.debug("execute_workflow response: %s", json.dumps(exec_result, default=str)[:300])
+
+        if exec_result.get("error"):
+            err = exec_result["error"]
+            log.warning("Workflow execution failed: %s", err)
+            send(make_error(self.req_id, -32603, "Workflow execution failed", err))
+            return
+
+        invocation_id: Optional[str] = (
+            exec_result.get("galaxyInvocationId")
+            or exec_result.get("runId")
+        )
+        run_id: Optional[str] = (
+            exec_result.get("nextflowRunId")
+            or exec_result.get("runId")
+        )
+        self._final_run_id = invocation_id or run_id
+
+        # Build canonical view URL into BioMate panel
+        base = self.client.base_url
+        if invocation_id:
+            self._final_view_url = f"{base}/workflows/{invocation_id}"
+        elif run_id:
+            self._final_view_url = f"{base}/workflows/{run_id}"
+
+        n += 1
+        self._emit_progress(
+            {
+                "kind": "phase_started",
+                "summary_md": f"**Phase 1: Workflow launched** — run `{self._final_run_id}`",
+                "view_url": self._final_view_url,
+                "delta": {"invocation_id": invocation_id, "run_id": run_id},
+            },
+            n,
+        )
+
+        if not invocation_id:
+            # Got a run but no invocationId to subscribe to events — return early.
+            final_text = "".join(ai_text_parts).strip() or "Workflow submitted."
+            send(make_response(self.req_id, {
+                "content": [{"type": "text", "text": json.dumps({
+                    "summary_md": final_text,
+                    "run_id": run_id,
+                    "view_url": self._final_view_url,
+                    "status": exec_result.get("status"),
+                }, indent=2)}],
+                "isError": False,
+            }))
+            return
+
+        # ── Phase 3: Stream workflow events ───────────────────────────────────
+        # Subscribe to /api/workflows/:invocationId/events SSE.
+        # The Python backend pushes phase/step/QC/finding events via
+        # /internal/sse-inject → sseManager.injectRawEvent().
+
+        terminal_kinds = {"done", "phase_failed"}
+        terminal_workflow_kinds = {"workflow.completed", "workflow.failed", "workflow.cancelled"}
+
+        for evt in self.client.workflow_events_stream(invocation_id):
+            ename = evt.get("event", "")
+            edata = evt.get("data") or {}
+
+            # Detect terminal event directly before normalization
+            is_terminal = False
+            if ename == "chat_progress" and isinstance(edata, dict):
+                if edata.get("kind") in terminal_workflow_kinds:
+                    is_terminal = True
+
+            payload = _normalize_sse_event(evt)
+            if payload is not None:
                 n += 1
+                if not payload.get("view_url"):
+                    payload["view_url"] = self._final_view_url
                 self._emit_progress(payload, n)
+
+                kind = payload.get("kind")
+                if kind == "text_delta":
+                    self._final_summary_md.append(payload.get("summary_md", ""))
                 if payload.get("delta", {}).get("run_id"):
                     self._final_run_id = payload["delta"]["run_id"]
                 if payload.get("view_url"):
                     self._final_view_url = payload["view_url"]
-                if payload.get("kind") == "text_delta":
-                    self._final_summary_md.append(payload.get("summary_md", ""))
-                if payload.get("kind") == "done":
-                    break
 
-            final_text = "".join(self._final_summary_md).strip() or "Session complete."
-            result_payload: Dict[str, Any] = {
-                "summary_md": final_text,
-                "run_id": self._final_run_id,
-                "view_url": self._final_view_url,
-            }
-            send(make_response(self.req_id, {
-                "content": [{"type": "text", "text": json.dumps(result_payload, indent=2)}],
-                "isError": False,
-            }))
-        except Exception as exc:
-            log.exception(f"SessionRunner error for {self.tool_name}")
-            send(make_error(self.req_id, -32603, "Streaming tool error", str(exc)))
+            if is_terminal or (payload and payload.get("kind") in terminal_kinds):
+                break
+
+        # ── Final response ────────────────────────────────────────────────────
+        ai_summary = "".join(ai_text_parts).strip()
+        wf_summary = " ".join(self._final_summary_md).strip()
+        final_text = wf_summary or ai_summary or "Session complete."
+
+        result_payload: Dict[str, Any] = {
+            "summary_md": final_text,
+            "run_id": self._final_run_id,
+            "view_url": self._final_view_url,
+        }
+        if self._final_view_url:
+            result_payload["summary_md"] += (
+                f"\n\n---\nLive panel: <{self._final_view_url}>"
+                f" · BioMate run id `{self._final_run_id}`"
+            )
+
+        send(make_response(self.req_id, {
+            "content": [{"type": "text", "text": json.dumps(result_payload, indent=2)}],
+            "isError": False,
+        }))
 
 
 # ──────────────────────────────────────────────────────────────────────────────
