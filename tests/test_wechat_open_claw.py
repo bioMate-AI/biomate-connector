@@ -262,8 +262,9 @@ class TestHandleWechatMessage(unittest.TestCase):
         # handle_wechat_message() returns an immediate ACK and spawns async thread
         # We just check the synchronous reply shape.
         reply = handle_wechat_message(self._xml("RNA-seq分析"), "corp")
-        # Should be an XML text reply with "正在分析"
+        # Should be an XML text reply with "正在分析" and a dashboard link
         self.assertIn("正在分析", reply)
+        self.assertIn("dashboard", reply)
         self.assertTrue(reply.startswith("<xml>"))
 
 

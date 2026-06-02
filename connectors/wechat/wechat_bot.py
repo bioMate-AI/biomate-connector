@@ -410,13 +410,9 @@ def handle_wechat_message(xml_body: str, corp_app_id: str) -> str:
         try:
             reply_text, workflow_id = _open_claw_query(from_user, content, api_key=user_api_key)
 
-            # Truncate for WeChat message length limit (2048 chars)
-            if len(reply_text) > 1800:
-                reply_text = reply_text[:1800] + f"\n\n[查看完整结果请访问 {BIOMATE_DEEP_LINK_BASE}]"
-
-            send_text_message(from_user, reply_text)
-
-            # If a specific workflow was identified, send a workflow card as well
+            # ── Step 1: send workflow panel card FIRST so the user gets the
+            # clickable link as soon as the AI identifies a workflow, before
+            # reading the full text response.
             if workflow_id:
                 send_workflow_card(
                     from_user,
@@ -424,14 +420,26 @@ def handle_wechat_message(xml_body: str, corp_app_id: str) -> str:
                     description=reply_text[:200],
                     workflow_id=workflow_id,
                 )
+
+            # ── Step 2: send the full AI text response
+            if len(reply_text) > 1800:
+                reply_text = reply_text[:1800] + f"\n\n[查看完整结果请访问 {BIOMATE_DEEP_LINK_BASE}]"
+            send_text_message(from_user, reply_text)
+
         except Exception as exc:
             log.exception("WeChat Open Claw async response failed")
             send_text_message(from_user, f"❌ BioMate查询失败：{exc}")
 
     threading.Thread(target=_respond_async, daemon=True).start()
 
-    # Immediate reply (WeChat requires response within 5s)
-    return build_text_reply(from_user, to_user, f"🤖 BioMate正在分析：{content[:60]}…")
+    # Immediate reply (WeChat requires response within 5s).
+    # Include the BioMate dashboard link so the user can open the panel
+    # right away and watch it populate when the run starts.
+    return build_text_reply(
+        from_user, to_user,
+        f"🤖 BioMate正在分析：{content[:60]}…\n\n"
+        f"可提前打开应用等待结果：{BIOMATE_DEEP_LINK_BASE}/dashboard"
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────────────
