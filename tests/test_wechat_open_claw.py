@@ -75,8 +75,8 @@ class MockSSEServer:
     def __init__(self, status: int = 200, events: list = None):
         self.status = status
         self.events = events or [
-            ("text_delta", {"text": "Hello "}),
-            ("text_delta", {"text": "world."}),
+            ("delta", {"text": "Hello "}),
+            ("delta", {"text": "world."}),
             ("done", {}),
         ]
         self.server: HTTPServer = None
@@ -112,12 +112,13 @@ class TestOpenClawQuery(unittest.TestCase):
         # Clear per-user history before each test
         _conversation_history.clear()
 
-    # ── Test 1: Normal query → text_delta events accumulate → reply returned ──
+    # ── Test 1: Normal query → delta events accumulate → reply returned ─────────
+    # /api/chat/stream uses event: delta (not text_delta)
 
     def test_normal_query_returns_text(self):
         events = [
-            ("text_delta", {"text": "RNA-seq "}),
-            ("text_delta", {"text": "differential expression workflow."}),
+            ("delta", {"text": "RNA-seq "}),
+            ("delta", {"text": "differential expression workflow."}),
             ("done", {}),
         ]
         with MockSSEServer(events=events) as srv:
@@ -135,9 +136,9 @@ class TestOpenClawQuery(unittest.TestCase):
     def test_done_event_stops_stream(self):
         # Events after "done" should not be collected
         events = [
-            ("text_delta", {"text": "First part."}),
+            ("delta", {"text": "First part."}),
             ("done", {}),
-            ("text_delta", {"text": "This should not appear."}),
+            ("delta", {"text": "This should not appear."}),
         ]
         with MockSSEServer(events=events) as srv:
             reply, _ = _open_claw_query(
@@ -148,17 +149,14 @@ class TestOpenClawQuery(unittest.TestCase):
         self.assertIn("First part", reply)
         self.assertNotIn("should not appear", reply)
 
-    # ── Test 3: workflow_id extracted from tool_result content ────────────────
+    # ── Test 3: workflow_name extracted from workflow_ready event ─────────────
+    # /api/chat/stream emits workflow_ready when a runnable workflow is found.
+    # The workflow name is used for the "Run in BioMate" deep-link.
 
     def test_workflow_id_extracted_from_tool_result(self):
-        tool_content = json.dumps({
-            "results": [
-                {"workflow_id": "rnaseq_differential", "name": "RNA-seq DE"}
-            ]
-        })
         events = [
-            ("tool_result", {"tool_use_id": "call_1", "content": tool_content}),
-            ("text_delta", {"text": "Found rnaseq_differential workflow."}),
+            ("workflow_ready", {"workflow_name": "rnaseq_differential", "workflow_type": "nextflow"}),
+            ("delta", {"text": "Found rnaseq_differential workflow."}),
             ("done", {}),
         ]
         with MockSSEServer(events=events) as srv:
@@ -172,7 +170,7 @@ class TestOpenClawQuery(unittest.TestCase):
     # ── Test 4: Multi-turn — history grows after each query ───────────────────
 
     def test_history_grows_after_query(self):
-        events = [("text_delta", {"text": "Answer 1."}), ("done", {})]
+        events = [("delta", {"text": "Answer 1."}), ("done", {})]
         with MockSSEServer(events=events) as srv:
             _open_claw_query("user4", "Question 1", _base_url_override=srv.base_url)
 
