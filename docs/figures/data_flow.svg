@@ -35,8 +35,8 @@
 
   <!-- 4 -->
   <rect x="570" y="70" width="140" height="80" rx="8" fill="#fff7ed" stroke="#f97316" stroke-width="1.5"/>
-  <text x="640" y="94" text-anchor="middle" font-size="11" font-weight="700" fill="#c2410c">④ AWS Batch</text>
-  <text x="640" y="110" text-anchor="middle" font-size="10" fill="#ea580c">Nextflow pipeline</text>
+  <text x="640" y="94" text-anchor="middle" font-size="11" font-weight="700" fill="#c2410c">④ BioMate cloud</text>
+  <text x="640" y="110" text-anchor="middle" font-size="10" fill="#ea580c">pipeline</text>
   <text x="640" y="124" text-anchor="middle" font-size="10" fill="#ea580c">executes on</text>
   <text x="640" y="138" text-anchor="middle" font-size="10" fill="#ea580c">cloud compute</text>
 
@@ -78,7 +78,7 @@
   <line x1="530" y1="275" x2="570" y2="275" stroke="#64748b" stroke-width="1.5" marker-end="url(#a)"/>
 
   <rect x="570" y="240" width="140" height="70" rx="8" fill="#fff7ed" stroke="#f97316" stroke-width="1.5"/>
-  <text x="640" y="264" text-anchor="middle" font-size="11" font-weight="700" fill="#c2410c">AWS Batch</text>
+  <text x="640" y="264" text-anchor="middle" font-size="11" font-weight="700" fill="#c2410c">BioMate cloud</text>
   <text x="640" y="280" text-anchor="middle" font-size="10" fill="#ea580c">pipeline runs</text>
   <text x="640" y="294" text-anchor="middle" font-size="10" fill="#ea580c">streams events</text>
 

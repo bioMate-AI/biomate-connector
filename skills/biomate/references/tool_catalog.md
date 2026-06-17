@@ -4,7 +4,7 @@
 
 ### `biomate_session` · **streams**
 
-Run a complete BioMate scientific session from a natural-language goal. BioMate picks the workflow, fills parameters from context, runs on AWS Batch, handles QC gates with auto-loop remediation, and produces findings. While running, the tool streams progress events (phase started, step completed, QC gate fired, auto-loop remediation, finding) to the host so the user sees real-time updates the same way BioMate's web panel does. Returns the final run summary, a deep link to the live panel, and the report URL.
+Run a complete BioMate scientific session from a natural-language goal. BioMate picks the workflow, fills parameters from context, runs on BioMate cloud, handles QC gates with auto-loop remediation, and produces findings. While running, the tool streams progress events (phase started, step completed, QC gate fired, auto-loop remediation, finding) to the host so the user sees real-time updates the same way BioMate's web panel does. Returns the final run summary, a deep link to the live panel, and the report URL.
 
 **Required:** `goal`
 
@@ -12,7 +12,7 @@ Run a complete BioMate scientific session from a natural-language goal. BioMate 
 
 ### `search_workflow`
 
-Search the BioMate workflow catalog (2,455 indexed workflows across 34 domains) by natural language. Returns ranked workflow cards with id, name, domain, one-line description, and estimated AWS Batch cost. Use this when the user wants to pick a workflow explicitly; otherwise prefer biomate_session.
+Search the BioMate workflow catalog (2,455 indexed workflows across 34 domains) by natural language. Returns ranked workflow cards with id, name, domain, one-line description, and estimated BioMate cloud cost. Use this when the user wants to pick a workflow explicitly; otherwise prefer biomate_session.
 
 **Required:** `query`
 
@@ -24,7 +24,7 @@ Return the full specification for a workflow: required + optional parameters (wi
 
 ### `run_workflow` · **streams**
 
-Execute a specific BioMate workflow on AWS Batch with explicit parameters. Returns a run_id immediately. If stream=true, also emits progress notifications until the run terminates (same events as biomate_session). Use biomate_session instead when the user gave you a natural-language goal.
+Execute a specific BioMate workflow on BioMate cloud with explicit parameters. Returns a run_id immediately. If stream=true, also emits progress notifications until the run terminates (same events as biomate_session). Use biomate_session instead when the user gave you a natural-language goal.
 
 **Required:** `workflow_id`
 
@@ -36,7 +36,7 @@ Return everything about a run in one call: status (pending|running|completed|fai
 
 ### `cancel_run`
 
-Cancel a running or queued BioMate workflow on AWS Batch.
+Cancel a running or queued BioMate workflow on BioMate cloud.
 
 **Required:** `run_id`
 

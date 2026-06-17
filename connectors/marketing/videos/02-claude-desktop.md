@@ -2,7 +2,7 @@
 
 **Duration target:** 75 seconds
 **Surface:** Claude Desktop (macOS app)
-**Workflow exercised:** nf-core/rnaseq
+**Workflow exercised:** RNA-seq pipeline
 
 ## Pre-roll
 
@@ -17,14 +17,14 @@
 
 **On screen:** Fresh Claude Desktop chat, MCP indicator showing "BioMate" with a green dot.
 
-**Caption overlay:** `Claude Desktop + BioMate — nf-core/rnaseq end-to-end`
+**Caption overlay:** `Claude Desktop + BioMate — RNA-seq pipeline end-to-end`
 
 ### Beat 2 — Run (0:10–1:00)
 
 **Paste:**
 
 ```
-Run nf-core/rnaseq on the following FASTQs. Treated vs control. GRCh38. Show the top 20 DE genes when done.
+Run RNA-seq pipeline on the following FASTQs. Treated vs control. GRCh38. Show the top 20 DE genes when done.
 
 Treated:
   s3://biomate-demo/rnaseq/T1_R1.fq.gz, s3://biomate-demo/rnaseq/T1_R2.fq.gz
@@ -39,7 +39,7 @@ Control:
 
 **On screen:**
 
-- Claude: *"I'll use BioMate's nf-core/rnaseq pipeline (workflow 12733)."*
+- Claude: *"I'll use BioMate's RNA-seq pipeline pipeline (workflow 12733)."*
 - `biomate_session` streams:
   - Phase 1: Sample sheet validation ✓
   - Phase 2: STAR alignment (6 samples, ~5 min on Batch)
@@ -56,8 +56,8 @@ Control:
 - Click the URL → workflow viewer in browser
 - Scroll to the volcano plot → click "Download methods report"
 
-**Caption overlay:** `Real nf-core/rnaseq run · STAR + salmon + DESeq2 · methods PDF ready`
+**Caption overlay:** `Real RNA-seq pipeline run · STAR + salmon + DESeq2 · methods PDF ready`
 
 ## Voiceover
 
-> "Real nf-core/rnaseq. Six samples, full STAR + salmon + DESeq2 pipeline, on AWS Batch from a single Claude Desktop prompt. Live progress, automatic QC, methods PDF for your manuscript."
+> "Real RNA-seq pipeline. Six samples, full STAR + salmon + DESeq2 pipeline, on BioMate cloud from a single Claude Desktop prompt. Live progress, automatic QC, methods PDF for your manuscript."

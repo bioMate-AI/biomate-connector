@@ -11,7 +11,7 @@
 
 | Asset | Location | Status |
 |---|---|---|
-| OAuth 2.1 server (Python) | `backend/lib/galaxy/connectors/oauth/` | Built, 7/7 unit tests passing |
+| OAuth 2.1 server (Python) | `oauth-server/` | Built, 7/7 unit tests passing |
 | Client seed script | `backend/scripts/seed_oauth_clients.py` | Built |
 | OAuth tests | `backend/tests/connectors/test_oauth_server.py` | Passing |
 | @biomate/connect installer (TS/npm) | `connectors/installer/` | Built, 8/8 unit tests passing |
@@ -40,7 +40,7 @@ Tests are organized in 5 layers, run in order. A surface ships only when all 5 l
 | L2 — Integration | Local services (OAuth server + mock API) | $0 | seconds |
 | L3 — Sandbox | Manifest schemas vs real client SDKs (no network) | $0 | seconds |
 | L4 — Live API | Real Anthropic/OpenAI/Gemini, tool routing only (no workflow run) | ~$0.05/run | minutes |
-| L5 — End-to-end | Full surface install + workflow run on AWS Batch | $0.05–$2/run | 5–15 min |
+| L5 — End-to-end | Full surface install + workflow run on BioMate cloud | $0.05–$2/run | 5–15 min |
 
 CI runs L1+L2+L3 on every PR. L4 runs nightly. L5 runs pre-release.
 
@@ -194,7 +194,7 @@ Already covered by `backend/tests/test_connector_live.py`. Asserts that real Ant
 
 | # | Prompt | Expected tool |
 |---|---|---|
-| 5.5 | "Show me what params nf-core/sarek needs" | `get_workflow_spec` |
+| 5.5 | "Show me what params WGS variant-calling pipeline needs" | `get_workflow_spec` |
 | 5.6 | "Run workflow 12849 with stream=true" | `run_workflow` |
 | 5.7 | "List my runs from last week" | `list_runs` |
 | 5.8 | "What's the status of run-xyz?" | `get_run` |
@@ -218,7 +218,7 @@ Skips cleanly when keys are absent. Total cost across 14 cases: ~$0.15.
 
 ## 6. L5 — End-to-end (real surface, real run)
 
-Per-surface manual smoke tests. Run on every release. Each takes 5–15 min and ~$0.05–$2 on AWS Batch.
+Per-surface manual smoke tests. Run on every release. Each takes 5–15 min and ~$0.05–$2 on BioMate cloud.
 
 ### 6.1 Claude Code
 
@@ -227,7 +227,7 @@ Per-surface manual smoke tests. Run on every release. Each takes 5–15 min and 
 | 6.1.1 | Fresh install | (1) Fresh VM (2) `npx @biomate/connect claude-code` (3) Restart Claude Code (4) Prompt: "Screen aspirin for hERG" | `~/.claude.json` written, MCP indicator green, ADMET runs, methods PDF produced |
 | 6.1.2 | Re-install (idempotency) | Run installer twice | No duplicate biomate entry; second install replaces first |
 | 6.1.3 | Existing `.claude.json` with other keys | Pre-populate with `theme=dark` and an unrelated mcpServer | Other keys preserved after install |
-| 6.1.4 | Long-running workflow (RNA-seq) | "Run nf-core/rnaseq DE on s3://..." | Phase events stream inline; final report URL valid |
+| 6.1.4 | Long-running workflow (RNA-seq) | "Run RNA-seq pipeline DE on s3://..." | Phase events stream inline; final report URL valid |
 | 6.1.5 | QC gate failure path | Screen a known hERG-active compound (terfenadine) | Gate fails inline, auto-loop offers remediated params with was→now diff |
 | 6.1.6 | Cancellation | Start an RNA-seq run; "Cancel that run" | `cancel_run` called, run goes to CANCELLED in <30s |
 | 6.1.7 | Token expiry → refresh | Wait 31 min, send a new prompt | Installer's refresh token rotates transparently |
@@ -343,8 +343,8 @@ Run this matrix on every release. Each cell is one E2E test (~5 min).
 |  | Claude Code | Claude Desktop | Cursor | Codex | ChatGPT | Open Claw | Slack |
 |---|---|---|---|---|---|---|---|
 | ADMET screening | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| nf-core/rnaseq | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| nf-core/sarek (WGS) | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
+| RNA-seq pipeline | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| WGS variant-calling pipeline (WGS) | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
 | CryoSPARC | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
 | AlphaFold/ESMFold | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | PBPK | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
@@ -372,9 +372,9 @@ Run this matrix on every release. Each cell is one E2E test (~5 min).
 
 | # | Inject failure | Expected behavior |
 |---|---|---|
-| 11.1 | AWS Batch returns INSUFFICIENT_CAPACITY | `biomate_session` event reports "queue depth: 12, est wait 5 min"; doesn't crash |
+| 11.1 | BioMate cloud returns INSUFFICIENT_CAPACITY | `biomate_session` event reports "queue depth: 12, est wait 5 min"; doesn't crash |
 | 11.2 | S3 PutObject 503 | Retry with exponential backoff; surface clear error after 3 fails |
-| 11.3 | Galaxy backend gunicorn restart mid-run | SSE reconnects; client-side `poll_run` catches up |
+| 11.3 | BioMate backend restart mid-run | SSE reconnects; client-side `poll_run` catches up |
 | 11.4 | Postgres connection pool exhausted | OAuth `/token` returns 503 with `Retry-After`; installer retries |
 | 11.5 | Anthropic API rate limit during routing | Backend backs off; user sees "high traffic, retrying"; ≤30s recovery |
 | 11.6 | Workflow stuck (no events for 10 min) | `get_run` returns `last_event_at`; UI shows "no progress in 10 min — check?" |
@@ -439,7 +439,7 @@ ANTHROPIC_API_KEY=sk-ant-... OPENAI_API_KEY=sk-... \
 | `connectors/TEST_PLAN.md` | This file |
 | `connectors/marketing/` | Launch assets (videos, blog, social, landing) |
 | `connectors/submissions/` | Directory submission packages |
-| `backend/lib/galaxy/connectors/oauth/` | OAuth source |
+| `oauth-server/` | OAuth source |
 | `connectors/installer/` | Installer source |
 
 ### Open issues / known gaps (filed before GA)

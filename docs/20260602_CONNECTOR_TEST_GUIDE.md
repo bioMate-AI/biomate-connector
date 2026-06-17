@@ -125,7 +125,7 @@ Expected: Claude's answer references the ADMET results from the previous turn.
 |---|---|
 | `biomate` not in `/mcp` list | Check the config file path; run `python3 biomate_mcp_server.py` manually to see errors |
 | `biomate_session` returns `events=0` | Check `BIOMATE_API_KEY` is set correctly; verify `/api/chat/stream` works with `curl` |
-| Timeout after Phase 1 | Normal if AWS Batch workflow takes >2 min; Phase 3 waits up to 60 min |
+| Timeout after Phase 1 | Normal if BioMate cloud workflow takes >2 min; Phase 3 waits up to 60 min |
 
 ---
 
@@ -268,7 +268,7 @@ Expected: Slack bot posts a Block Kit message with:
 ```
 /biomate Differential expression analysis on RNA-seq data from human liver tissue
 ```
-Expected: Response mentioning nf-core/rnaseq or DESeq2 workflow.
+Expected: Response mentioning RNA-seq pipeline or DESeq2 workflow.
 
 **Test 3 — general question (no workflow):**
 ```
@@ -367,7 +367,7 @@ Expected:
 I have RNA-seq data from 10 tumor and 10 normal samples. How do I find 
 differentially expressed genes?
 ```
-Expected: Explanation of nf-core/rnaseq or DESeq2 workflow + run link.
+Expected: Explanation of RNA-seq pipeline or DESeq2 workflow + run link.
 
 **Test 3 — CryoEM:**
 ```

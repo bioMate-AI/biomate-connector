@@ -1,13 +1,13 @@
 ---
 name: biomate
-description: Run real bioinformatics, drug-discovery, and clinical workflows on BioMate's AWS Batch infrastructure. Use whenever the user asks to screen compounds (ADMET, docking), analyze sequencing data (RNA-seq, WGS, variant calling), reconstruct cryo-EM, model PK/PBPK, predict protein structure, or generate IND / CRO regulatory reports. The Skill streams live progress (phase started, step completed, QC gate fired, auto-loop remediation, finding) inline and returns a deep link to the live BioMate panel for the full UI.
+description: Run real bioinformatics, drug-discovery, and clinical workflows on BioMate's BioMate cloud infrastructure. Use whenever the user asks to screen compounds (ADMET, docking), analyze sequencing data (RNA-seq, WGS, variant calling), reconstruct cryo-EM, model PK/PBPK, predict protein structure, or generate IND / CRO regulatory reports. The Skill streams live progress (phase started, step completed, QC gate fired, auto-loop remediation, finding) inline and returns a deep link to the live BioMate panel for the full UI.
 license: proprietary
 version: 2.0.0
 ---
 
 # BioMate Skill
 
-BioMate is a bioinformatics + drug-discovery platform with 2,455 indexed Nextflow / Bioconductor workflows, auto-loop QC remediation, and a structured findings/methods report generator. This Skill wires BioMate's MCP server into Claude so the user can run real workflows from chat and watch progress stream inline.
+BioMate is a bioinformatics + drug-discovery platform with 2,455 indexed pipeline / Bioconductor workflows, auto-loop QC remediation, and a structured findings/methods report generator. This Skill wires BioMate's MCP server into Claude so the user can run real workflows from chat and watch progress stream inline.
 
 ## When to use this Skill
 
@@ -25,11 +25,11 @@ Do **not** use these tools for general chit-chat, code generation unrelated to b
 
 There are 14 tools in three tiers. Default to the **agentic** tier:
 
-1. **For 90 % of requests, call `biomate_session` first.** Pass the user's full natural-language goal verbatim plus any structured inputs (S3 keys, SMILES, FASTQ paths). BioMate will pick the workflow, fill parameters, run on AWS Batch, handle QC gates with auto-loop remediation, and produce findings — all streamed back as progress notifications.
+1. **For 90 % of requests, call `biomate_session` first.** Pass the user's full natural-language goal verbatim plus any structured inputs (S3 keys, SMILES, FASTQ paths). BioMate will pick the workflow, fill parameters, run on BioMate cloud, handle QC gates with auto-loop remediation, and produce findings — all streamed back as progress notifications.
 
 2. **Use the primitives only when the user wants explicit control.** Examples:
    - "Show me what workflows are available for cryo-EM" → `search_workflow`.
-   - "What parameters does nf-core/sarek take?" → `search_workflow` then `get_workflow_spec`.
+   - "What parameters does WGS variant-calling pipeline take?" → `search_workflow` then `get_workflow_spec`.
    - "Run rnaseq with these exact params: …" → `run_workflow`.
    - "What's the status of run abc-123?" → `get_run`.
    - "Cancel run abc-123" → `cancel_run`.
@@ -79,8 +79,8 @@ ASSISTANT: → biomate_session(goal="Screen these SMILES for hERG and CYP3A4 lia
 ```
 
 ```text
-USER: Run nf-core/rnaseq on s3://exp42/fastq/, human paired-end, dUTP stranded
-ASSISTANT: → biomate_session(goal="Run nf-core/rnaseq …", inputs={input_dir: "s3://exp42/fastq/", genome: "GRCh38", strandedness: "reverse"})
+USER: Run RNA-seq pipeline on s3://exp42/fastq/, human paired-end, dUTP stranded
+ASSISTANT: → biomate_session(goal="Run RNA-seq pipeline …", inputs={input_dir: "s3://exp42/fastq/", genome: "GRCh38", strandedness: "reverse"})
 ```
 
 ```text

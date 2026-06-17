@@ -4,11 +4,11 @@ Connect BioMate to the AI tools you already use — Claude Code, Claude Desktop,
 
 ```
 > Screen aspirin and caffeine for hERG inhibition and CYP3A4 metabolism.
-> Run nf-core/rnaseq differential expression on s3://my-bucket/fastqs/, treated vs control.
+> Run RNA-seq differential expression on s3://my-bucket/fastqs/, treated vs control.
 > Refine this cryo-EM stack with CryoSPARC homogeneous refinement, C2 symmetry.
 ```
 
-BioMate finds the right pipeline from 2,455 indexed workflows, fills the parameters, launches on AWS Batch, and streams live progress back to your assistant. No copy-pasting commands. No waiting for a dashboard to refresh.
+BioMate finds the right pipeline from 2,455 indexed workflows, fills the parameters, launches on BioMate cloud, and streams live progress back to your assistant. No copy-pasting commands. No waiting for a dashboard to refresh.
 
 ## Architecture
 

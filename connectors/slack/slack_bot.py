@@ -191,9 +191,9 @@ def _chat_stream_query(
                                 or wf.get("workflow_name")
                                 or wf.get("chain_display_name")
                             )
-                        if not view_url and (wf.get("nextflow_path") or wf.get("workflow_type")):
+                        if not view_url and (wf.get("pipeline_path") or wf.get("workflow_type")):
                             # Construct deep-link to BioMate panel
-                            nf = wf.get("nextflow_path", "")
+                            nf = wf.get("pipeline_path", "")
                             view_url = f"{BIOMATE_DEEP_LINK_BASE}/chat?workflow={nf}" if nf else BIOMATE_DEEP_LINK_BASE
 
                     elif current_event in ("done", "complete"):

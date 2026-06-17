@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "BioMate Connector API",
-    "description": "Run bioinformatics, drug-discovery, and clinical workflows on BioMate's AWS Batch infrastructure. Search 2,455 indexed workflows, execute on real compute, stream live progress, and retrieve structured findings + reports. Schema is generated from backend/lib/mcp/tools_manifest.py.",
+    "description": "Run bioinformatics, drug-discovery, and clinical workflows on BioMate's BioMate cloud infrastructure. Search 2,455 indexed workflows, execute on real compute, stream live progress, and retrieve structured findings + reports. Schema is generated from backend/lib/mcp/tools_manifest.py.",
     "version": "2.0.0",
     "contact": {
       "name": "BioMate Support",
@@ -23,7 +23,7 @@
       "post": {
         "operationId": "biomate_session",
         "summary": "Run a complete BioMate scientific session from a natural-language goal.",
-        "description": "Run a complete BioMate scientific session from a natural-language goal. BioMate picks the workflow, fills parameters from context, runs on AWS Batch, handles QC gates with auto-loop remediation, and produces findings. While running, the tool streams progress events (phase started, step completed, QC gate fired, auto-loop remediation, finding) to the host so the user sees real-time updates the same way BioMate's web panel does. Returns the final run summary, a deep link to the live panel, and the report URL.",
+        "description": "Run a complete BioMate scientific session from a natural-language goal. BioMate picks the workflow, fills parameters from context, runs on BioMate cloud, handles QC gates with auto-loop remediation, and produces findings. While running, the tool streams progress events (phase started, step completed, QC gate fired, auto-loop remediation, finding) to the host so the user sees real-time updates the same way BioMate's web panel does. Returns the final run summary, a deep link to the live panel, and the report URL.",
         "x-streaming": true,
         "requestBody": {
           "required": true,
@@ -34,7 +34,7 @@
                 "properties": {
                   "goal": {
                     "type": "string",
-                    "description": "Natural language description of what to do. Examples: 'screen these 12 SMILES for hERG and CYP3A4 liability', 'run nf-core/rnaseq on FASTQ files in s3://bucket/exp42/, human, paired-end', 'predict the structure of P04637 and the top 5 destabilizing mutations'."
+                    "description": "Natural language description of what to do. Examples: 'screen these 12 SMILES for hERG and CYP3A4 liability', 'run RNA-seq pipeline on FASTQ files in s3://bucket/exp42/, human, paired-end', 'predict the structure of P04637 and the top 5 destabilizing mutations'."
                   },
                   "inputs": {
                     "type": "object",
@@ -97,7 +97,7 @@
       "post": {
         "operationId": "search_workflow",
         "summary": "Search the BioMate workflow catalog (2,455 indexed workflows across 34 domains) by natural language.",
-        "description": "Search the BioMate workflow catalog (2,455 indexed workflows across 34 domains) by natural language. Returns ranked workflow cards with id, name, domain, one-line description, and estimated AWS Batch cost. Use this when the user wants to pick a workflow explicitly; otherwise prefer biomate_session.",
+        "description": "Search the BioMate workflow catalog (2,455 indexed workflows across 34 domains) by natural language. Returns ranked workflow cards with id, name, domain, one-line description, and estimated BioMate cloud cost. Use this when the user wants to pick a workflow explicitly; otherwise prefer biomate_session.",
         "x-streaming": false,
         "requestBody": {
           "required": true,
@@ -225,8 +225,8 @@
     "/tools/run_workflow": {
       "post": {
         "operationId": "run_workflow",
-        "summary": "Execute a specific BioMate workflow on AWS Batch with explicit parameters.",
-        "description": "Execute a specific BioMate workflow on AWS Batch with explicit parameters. Returns a run_id immediately. If stream=true, also emits progress notifications until the run terminates (same events as biomate_session). Use biomate_session instead when the user gave you a natural-language goal.",
+        "summary": "Execute a specific BioMate workflow on BioMate cloud with explicit parameters.",
+        "description": "Execute a specific BioMate workflow on BioMate cloud with explicit parameters. Returns a run_id immediately. If stream=true, also emits progress notifications until the run terminates (same events as biomate_session). Use biomate_session instead when the user gave you a natural-language goal.",
         "x-streaming": true,
         "requestBody": {
           "required": true,
@@ -364,8 +364,8 @@
     "/tools/cancel_run": {
       "post": {
         "operationId": "cancel_run",
-        "summary": "Cancel a running or queued BioMate workflow on AWS Batch.",
-        "description": "Cancel a running or queued BioMate workflow on AWS Batch.",
+        "summary": "Cancel a running or queued BioMate workflow on BioMate cloud.",
+        "description": "Cancel a running or queued BioMate workflow on BioMate cloud.",
         "x-streaming": false,
         "requestBody": {
           "required": true,

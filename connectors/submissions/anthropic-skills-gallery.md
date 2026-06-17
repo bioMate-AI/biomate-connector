@@ -20,7 +20,7 @@ Already in repo at [`skills/biomate/`](../../skills/biomate/):
 |---|---|
 | Skill name | BioMate — bioinformatics workflow execution |
 | Author | BioMate AI |
-| Tagline | Run real bioinformatics on AWS Batch from Claude (nf-core, CryoSPARC, AlphaFold, ADMET) |
+| Tagline | Run real bioinformatics on BioMate cloud from Claude (RNA-seq/WGS, CryoSPARC, AlphaFold, ADMET) |
 | Categories | Science, Research, Healthcare |
 | Repository | https://github.com/bioMate-AI/biomate-connectors |
 | Skill path | `skills/biomate/` |
@@ -31,9 +31,9 @@ Already in repo at [`skills/biomate/`](../../skills/biomate/):
 ## Description
 
 > BioMate is an execution engine for bioinformatics: 2,455 indexed workflows
-> across 34 biological domains (nf-core, CryoSPARC, AlphaFold/ESMFold,
+> across 34 biological domains (RNA-seq/WGS, CryoSPARC, AlphaFold/ESMFold,
 > OpenMM, GROMACS, Vina, Bioconductor, custom drug-discovery pipelines),
-> running on AWS Batch with GPU support, QC gates, and FDA-formatted
+> running on BioMate cloud with GPU support, QC gates, and FDA-formatted
 > methods reports.
 >
 > This Skill carries:

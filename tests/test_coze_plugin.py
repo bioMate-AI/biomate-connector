@@ -160,7 +160,7 @@ class TestChatStreamQuery(unittest.TestCase):
 
     def test_workflow_name_extracted_from_workflow_ready(self):
         events = [
-            ("workflow_ready", {"workflow_name": "admet_screening", "workflow_type": "nextflow"}),
+            ("workflow_ready", {"workflow_name": "admet_screening", "workflow_type": "pipeline"}),
             ("delta", {"text": "Found ADMET workflow."}),
             ("done", {}),
         ]

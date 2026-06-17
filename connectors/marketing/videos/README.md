@@ -21,7 +21,7 @@ three-beat structure so they cut together cleanly for a launch montage.
 | # | Surface | Demo prompt | Workflow exercised |
 |---|---|---|---|
 | 1 | Claude Code | `Screen aspirin and caffeine for hERG and CYP3A4` | ADMET (DeepPK) |
-| 2 | Claude Desktop | `Run nf-core/rnaseq DE: treated vs control, GRCh38` | RNA-seq |
+| 2 | Claude Desktop | `Run RNA-seq pipeline DE: treated vs control, GRCh38` | RNA-seq |
 | 3 | Cursor | `Refine particles.cs with CryoSPARC homogeneous, C2 sym` | CryoSPARC |
 | 4 | Codex CLI | `Variant calling on WGS samples, sarek best-practices` | Sarek WGS |
 | 5 | ChatGPT | `IND §2.6.1 narrative from my latest ADMET + PBPK runs` | Reports |

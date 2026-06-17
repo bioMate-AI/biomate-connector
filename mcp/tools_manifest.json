@@ -4,13 +4,13 @@
   "mcp": [
     {
       "name": "biomate_session",
-      "description": "Run a complete BioMate scientific session from a natural-language goal. BioMate picks the workflow, fills parameters from context, runs on AWS Batch, handles QC gates with auto-loop remediation, and produces findings. While running, the tool streams progress events (phase started, step completed, QC gate fired, auto-loop remediation, finding) to the host so the user sees real-time updates the same way BioMate's web panel does. Returns the final run summary, a deep link to the live panel, and the report URL.",
+      "description": "Run a complete BioMate scientific session from a natural-language goal. BioMate picks the workflow, fills parameters from context, runs on BioMate cloud, handles QC gates with auto-loop remediation, and produces findings. While running, the tool streams progress events (phase started, step completed, QC gate fired, auto-loop remediation, finding) to the host so the user sees real-time updates the same way BioMate's web panel does. Returns the final run summary, a deep link to the live panel, and the report URL.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "goal": {
             "type": "string",
-            "description": "Natural language description of what to do. Examples: 'screen these 12 SMILES for hERG and CYP3A4 liability', 'run nf-core/rnaseq on FASTQ files in s3://bucket/exp42/, human, paired-end', 'predict the structure of P04637 and the top 5 destabilizing mutations'."
+            "description": "Natural language description of what to do. Examples: 'screen these 12 SMILES for hERG and CYP3A4 liability', 'run RNA-seq pipeline on FASTQ files in s3://bucket/exp42/, human, paired-end', 'predict the structure of P04637 and the top 5 destabilizing mutations'."
           },
           "inputs": {
             "type": "object",
@@ -34,7 +34,7 @@
     },
     {
       "name": "search_workflow",
-      "description": "Search the BioMate workflow catalog (2,455 indexed workflows across 34 domains) by natural language. Returns ranked workflow cards with id, name, domain, one-line description, and estimated AWS Batch cost. Use this when the user wants to pick a workflow explicitly; otherwise prefer biomate_session.",
+      "description": "Search the BioMate workflow catalog (2,455 indexed workflows across 34 domains) by natural language. Returns ranked workflow cards with id, name, domain, one-line description, and estimated BioMate cloud cost. Use this when the user wants to pick a workflow explicitly; otherwise prefer biomate_session.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -75,7 +75,7 @@
     },
     {
       "name": "run_workflow",
-      "description": "Execute a specific BioMate workflow on AWS Batch with explicit parameters. Returns a run_id immediately. If stream=true, also emits progress notifications until the run terminates (same events as biomate_session). Use biomate_session instead when the user gave you a natural-language goal.",
+      "description": "Execute a specific BioMate workflow on BioMate cloud with explicit parameters. Returns a run_id immediately. If stream=true, also emits progress notifications until the run terminates (same events as biomate_session). Use biomate_session instead when the user gave you a natural-language goal.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -126,7 +126,7 @@
     },
     {
       "name": "cancel_run",
-      "description": "Cancel a running or queued BioMate workflow on AWS Batch.",
+      "description": "Cancel a running or queued BioMate workflow on BioMate cloud.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -367,13 +367,13 @@
   "anthropic": [
     {
       "name": "biomate_session",
-      "description": "Run a complete BioMate scientific session from a natural-language goal. BioMate picks the workflow, fills parameters from context, runs on AWS Batch, handles QC gates with auto-loop remediation, and produces findings. While running, the tool streams progress events (phase started, step completed, QC gate fired, auto-loop remediation, finding) to the host so the user sees real-time updates the same way BioMate's web panel does. Returns the final run summary, a deep link to the live panel, and the report URL.",
+      "description": "Run a complete BioMate scientific session from a natural-language goal. BioMate picks the workflow, fills parameters from context, runs on BioMate cloud, handles QC gates with auto-loop remediation, and produces findings. While running, the tool streams progress events (phase started, step completed, QC gate fired, auto-loop remediation, finding) to the host so the user sees real-time updates the same way BioMate's web panel does. Returns the final run summary, a deep link to the live panel, and the report URL.",
       "input_schema": {
         "type": "object",
         "properties": {
           "goal": {
             "type": "string",
-            "description": "Natural language description of what to do. Examples: 'screen these 12 SMILES for hERG and CYP3A4 liability', 'run nf-core/rnaseq on FASTQ files in s3://bucket/exp42/, human, paired-end', 'predict the structure of P04637 and the top 5 destabilizing mutations'."
+            "description": "Natural language description of what to do. Examples: 'screen these 12 SMILES for hERG and CYP3A4 liability', 'run RNA-seq pipeline on FASTQ files in s3://bucket/exp42/, human, paired-end', 'predict the structure of P04637 and the top 5 destabilizing mutations'."
           },
           "inputs": {
             "type": "object",
@@ -397,7 +397,7 @@
     },
     {
       "name": "search_workflow",
-      "description": "Search the BioMate workflow catalog (2,455 indexed workflows across 34 domains) by natural language. Returns ranked workflow cards with id, name, domain, one-line description, and estimated AWS Batch cost. Use this when the user wants to pick a workflow explicitly; otherwise prefer biomate_session.",
+      "description": "Search the BioMate workflow catalog (2,455 indexed workflows across 34 domains) by natural language. Returns ranked workflow cards with id, name, domain, one-line description, and estimated BioMate cloud cost. Use this when the user wants to pick a workflow explicitly; otherwise prefer biomate_session.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -438,7 +438,7 @@
     },
     {
       "name": "run_workflow",
-      "description": "Execute a specific BioMate workflow on AWS Batch with explicit parameters. Returns a run_id immediately. If stream=true, also emits progress notifications until the run terminates (same events as biomate_session). Use biomate_session instead when the user gave you a natural-language goal.",
+      "description": "Execute a specific BioMate workflow on BioMate cloud with explicit parameters. Returns a run_id immediately. If stream=true, also emits progress notifications until the run terminates (same events as biomate_session). Use biomate_session instead when the user gave you a natural-language goal.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -489,7 +489,7 @@
     },
     {
       "name": "cancel_run",
-      "description": "Cancel a running or queued BioMate workflow on AWS Batch.",
+      "description": "Cancel a running or queued BioMate workflow on BioMate cloud.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -732,13 +732,13 @@
       "type": "function",
       "function": {
         "name": "biomate_session",
-        "description": "Run a complete BioMate scientific session from a natural-language goal. BioMate picks the workflow, fills parameters from context, runs on AWS Batch, handles QC gates with auto-loop remediation, and produces findings. While running, the tool streams progress events (phase started, step completed, QC gate fired, auto-loop remediation, finding) to the host so the user sees real-time updates the same way BioMate's web panel does. Returns the final run summary, a deep link to the live panel, and the report URL.",
+        "description": "Run a complete BioMate scientific session from a natural-language goal. BioMate picks the workflow, fills parameters from context, runs on BioMate cloud, handles QC gates with auto-loop remediation, and produces findings. While running, the tool streams progress events (phase started, step completed, QC gate fired, auto-loop remediation, finding) to the host so the user sees real-time updates the same way BioMate's web panel does. Returns the final run summary, a deep link to the live panel, and the report URL.",
         "parameters": {
           "type": "object",
           "properties": {
             "goal": {
               "type": "string",
-              "description": "Natural language description of what to do. Examples: 'screen these 12 SMILES for hERG and CYP3A4 liability', 'run nf-core/rnaseq on FASTQ files in s3://bucket/exp42/, human, paired-end', 'predict the structure of P04637 and the top 5 destabilizing mutations'."
+              "description": "Natural language description of what to do. Examples: 'screen these 12 SMILES for hERG and CYP3A4 liability', 'run RNA-seq pipeline on FASTQ files in s3://bucket/exp42/, human, paired-end', 'predict the structure of P04637 and the top 5 destabilizing mutations'."
             },
             "inputs": {
               "type": "object",
@@ -765,7 +765,7 @@
       "type": "function",
       "function": {
         "name": "search_workflow",
-        "description": "Search the BioMate workflow catalog (2,455 indexed workflows across 34 domains) by natural language. Returns ranked workflow cards with id, name, domain, one-line description, and estimated AWS Batch cost. Use this when the user wants to pick a workflow explicitly; otherwise prefer biomate_session.",
+        "description": "Search the BioMate workflow catalog (2,455 indexed workflows across 34 domains) by natural language. Returns ranked workflow cards with id, name, domain, one-line description, and estimated BioMate cloud cost. Use this when the user wants to pick a workflow explicitly; otherwise prefer biomate_session.",
         "parameters": {
           "type": "object",
           "properties": {
@@ -812,7 +812,7 @@
       "type": "function",
       "function": {
         "name": "run_workflow",
-        "description": "Execute a specific BioMate workflow on AWS Batch with explicit parameters. Returns a run_id immediately. If stream=true, also emits progress notifications until the run terminates (same events as biomate_session). Use biomate_session instead when the user gave you a natural-language goal.",
+        "description": "Execute a specific BioMate workflow on BioMate cloud with explicit parameters. Returns a run_id immediately. If stream=true, also emits progress notifications until the run terminates (same events as biomate_session). Use biomate_session instead when the user gave you a natural-language goal.",
         "parameters": {
           "type": "object",
           "properties": {
@@ -869,7 +869,7 @@
       "type": "function",
       "function": {
         "name": "cancel_run",
-        "description": "Cancel a running or queued BioMate workflow on AWS Batch.",
+        "description": "Cancel a running or queued BioMate workflow on BioMate cloud.",
         "parameters": {
           "type": "object",
           "properties": {

@@ -221,7 +221,7 @@ class TestGPT4Live(unittest.TestCase):
                 "description": (
                     "Run a complete BioMate scientific session from a natural-language goal. "
                     "BioMate selects the best workflow (ADMET, RNA-seq, WGS, CryoEM, PBPK, etc.), "
-                    "fills parameters, runs on AWS Batch, and returns findings. "
+                    "fills parameters, runs on BioMate cloud, and returns findings. "
                     "Use this for 90% of scientific analysis requests."
                 ),
                 "parameters": {
@@ -328,7 +328,7 @@ class TestGPT4Live(unittest.TestCase):
 
     def test_rnaseq_query_goal_contains_rnaseq(self):
         tc = self._first_tool_call(
-            "Run nf-core/rnaseq differential expression on FASTQ files in s3://my-bucket/exp1/"
+            "Run RNA-seq pipeline differential expression on FASTQ files in s3://my-bucket/exp1/"
         )
         self.assertIsNotNone(tc)
         self.assertEqual(tc.function.name, "biomate_session")

@@ -53,5 +53,5 @@ Tap the link → mobile-rendered biomate.ai/runs page opens in WeChat's built-in
 
 ## Voiceover (Mandarin, with English subs)
 
-> "BioMate Open Claw 让中国研究员在微信里直接跑真正的 ADMET 流程 —— AWS Batch 后端，QC 门自动，PDF 方法学报告完整。从来不用换应用。"
-> *"BioMate Open Claw lets Chinese researchers run real ADMET pipelines directly from WeChat — AWS Batch backend, automatic QC gates, complete PDF methods report. Never leave the app."*
+> "BioMate Open Claw 让中国研究员在微信里直接跑真正的 ADMET 流程 —— BioMate cloud 后端，QC 门自动，PDF 方法学报告完整。从来不用换应用。"
+> *"BioMate Open Claw lets Chinese researchers run real ADMET pipelines directly from WeChat — BioMate cloud backend, automatic QC gates, complete PDF methods report. Never leave the app."*

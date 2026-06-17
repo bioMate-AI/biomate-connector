@@ -64,7 +64,7 @@ TOOL_SCHEMAS: List[ToolSchema] = [
         tier="agentic",
         description=(
             "Run a complete BioMate scientific session from a natural-language goal. "
-            "BioMate picks the workflow, fills parameters from context, runs on AWS Batch, "
+            "BioMate picks the workflow, fills parameters from context, runs on BioMate cloud, "
             "handles QC gates with auto-loop remediation, and produces findings. "
             "While running, the tool streams progress events (phase started, step completed, "
             "QC gate fired, auto-loop remediation, finding) to the host so the user sees "
@@ -79,7 +79,7 @@ TOOL_SCHEMAS: List[ToolSchema] = [
                     "description": (
                         "Natural language description of what to do. Examples: "
                         "'screen these 12 SMILES for hERG and CYP3A4 liability', "
-                        "'run nf-core/rnaseq on FASTQ files in s3://bucket/exp42/, human, paired-end', "
+                        "'run RNA-seq pipeline on FASTQ files in s3://bucket/exp42/, human, paired-end', "
                         "'predict the structure of P04637 and the top 5 destabilizing mutations'."
                     ),
                 },
@@ -117,7 +117,7 @@ TOOL_SCHEMAS: List[ToolSchema] = [
         description=(
             "Search the BioMate workflow catalog (2,455 indexed workflows across 34 domains) "
             "by natural language. Returns ranked workflow cards with id, name, domain, "
-            "one-line description, and estimated AWS Batch cost. Use this when the user "
+            "one-line description, and estimated BioMate cloud cost. Use this when the user "
             "wants to pick a workflow explicitly; otherwise prefer biomate_session."
         ),
         input_schema={
@@ -157,7 +157,7 @@ TOOL_SCHEMAS: List[ToolSchema] = [
         name="run_workflow",
         tier="workflow",
         description=(
-            "Execute a specific BioMate workflow on AWS Batch with explicit parameters. "
+            "Execute a specific BioMate workflow on BioMate cloud with explicit parameters. "
             "Returns a run_id immediately. If stream=true, also emits progress notifications "
             "until the run terminates (same events as biomate_session). "
             "Use biomate_session instead when the user gave you a natural-language goal."
@@ -210,7 +210,7 @@ TOOL_SCHEMAS: List[ToolSchema] = [
     ToolSchema(
         name="cancel_run",
         tier="workflow",
-        description="Cancel a running or queued BioMate workflow on AWS Batch.",
+        description="Cancel a running or queued BioMate workflow on BioMate cloud.",
         input_schema={
             "type": "object",
             "properties": {"run_id": {"type": "string", "description": "Run ID to cancel."}},
@@ -481,7 +481,7 @@ def to_openapi() -> Dict[str, Any]:
             "title": "BioMate Connector API",
             "description": (
                 "Run bioinformatics, drug-discovery, and clinical workflows on BioMate's "
-                "AWS Batch infrastructure. Search 2,455 indexed workflows, execute on real "
+                "BioMate cloud infrastructure. Search 2,455 indexed workflows, execute on real "
                 "compute, stream live progress, and retrieve structured findings + reports. "
                 "Schema is generated from backend/lib/mcp/tools_manifest.py."
             ),

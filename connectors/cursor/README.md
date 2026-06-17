@@ -17,7 +17,7 @@ Then **restart Cursor**. The BioMate tools appear in the MCP servers panel (Sett
 ```
 
 ```
-@biomate Run nf-core/sarek WGS variant calling on samples in s3://biomate-demo/wgs/run-2026-05/
+@biomate Run WGS variant-calling pipeline WGS variant calling on samples in s3://biomate-demo/wgs/run-2026-05/
 against GRCh38. Use the standard GATK best-practices configuration.
 ```
 

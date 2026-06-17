@@ -7,7 +7,7 @@ Target: https://chatgpt.com/gpts/editor → Publish → GPT store
 | Field | Value |
 |---|---|
 | Name | BioMate AI — bioinformatics workflows |
-| Description | Run real bioinformatics on AWS Batch — nf-core, CryoSPARC, AlphaFold, ADMET, PBPK — from ChatGPT. |
+| Description | Run real bioinformatics on BioMate cloud — RNA-seq/WGS, CryoSPARC, AlphaFold, ADMET, PBPK — from ChatGPT. |
 | Picture | https://biomate.ai/static/gpt-cover-2048.png (use square dna-helix mark on neutral bg) |
 | Categories | Science, Research |
 | Conversation starters | (see below) |
@@ -40,7 +40,7 @@ Tools:
 Default behavior:
 1. If the user describes an analysis goal in natural language → call
    biomate_session (the agentic tool). Render its summary_md inline.
-2. If the user names a specific workflow (e.g. "nf-core/sarek") → use
+2. If the user names a specific workflow (e.g. "WGS variant-calling pipeline") → use
    search_workflow → get_workflow_spec → run_workflow (with stream=true).
 3. For repeat users, call recall_memory first.
 4. For long runs, surface phase/step transitions; do not invent progress.

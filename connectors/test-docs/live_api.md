@@ -33,7 +33,7 @@ Cost per full run: ~$0.04 (12k input + 550 output tokens).
 
 | # | Prompt | Expected tool |
 |---|---|---|
-| 5 | "Show me what params nf-core/sarek needs" | `get_workflow_spec` |
+| 5 | "Show me what params WGS variant-calling pipeline needs" | `get_workflow_spec` |
 | 6 | "Run workflow 12849 with stream=true" | `run_workflow` |
 | 7 | "List my runs from last week" | `list_runs` |
 | 8 | "What's the status of run-xyz?" | `get_run` |

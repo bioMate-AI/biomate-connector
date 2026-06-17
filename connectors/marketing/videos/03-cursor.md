@@ -51,4 +51,4 @@ Claude (via MCP):
 
 ## Voiceover
 
-> "Cursor with BioMate runs real CryoSPARC refinement — 25,000 particles, GPU on AWS Batch, FSC 0.143 at 3.2 Å. The result loads straight into your Python buffer for the figure."
+> "Cursor with BioMate runs real CryoSPARC refinement — 25,000 particles, GPU on BioMate cloud, FSC 0.143 at 3.2 Å. The result loads straight into your Python buffer for the figure."

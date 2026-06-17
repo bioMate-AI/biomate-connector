@@ -7,7 +7,7 @@ Target: https://cursor.directory/mcp (submission form)
 | Field | Value |
 |---|---|
 | Name | BioMate |
-| Tagline (≤80 chars) | Run real bioinformatics — nf-core, CryoSPARC, AlphaFold — from Cursor chat |
+| Tagline (≤80 chars) | Run real bioinformatics — RNA-seq/WGS, CryoSPARC, AlphaFold — from Cursor chat |
 | Category | Science / Research |
 | GitHub URL | https://github.com/bioMate-AI/biomate-connectors |
 | Install command | `npx @biomate/connect cursor` |
@@ -17,9 +17,9 @@ Target: https://cursor.directory/mcp (submission form)
 
 ## Description (Markdown, ~300 words)
 
-> **BioMate** runs real bioinformatics from Cursor's chat panel: nf-core/rnaseq, nf-core/sarek, CryoSPARC, AlphaFold, ADMET screens, PBPK, OpenMM — on AWS Batch with GPU support, with QC gates and FDA-formatted methods reports.
+> **BioMate** runs real bioinformatics from Cursor's chat panel: RNA-seq pipeline, WGS variant-calling pipeline, CryoSPARC, AlphaFold, ADMET screens, PBPK, OpenMM — on BioMate cloud with GPU support, with QC gates and FDA-formatted methods reports.
 >
-> 2,455 indexed workflows across 34 biological domains. Same execution backend as biomate.ai/runs.
+> 2,455 indexed workflows across 34 biological domains. Same execution engine as biomate.ai/runs.
 >
 > ### Install
 >
@@ -34,7 +34,7 @@ Target: https://cursor.directory/mcp (submission form)
 > Open chat and ask:
 >
 > - "Screen aspirin and caffeine for hERG and CYP3A4 inhibition."
-> - "Run nf-core/rnaseq DE on s3://biomate-demo/rnaseq/, treated vs control, GRCh38."
+> - "Run RNA-seq pipeline DE on s3://biomate-demo/rnaseq/, treated vs control, GRCh38."
 > - "Refine s3://biomate-demo/cryo/particles.cs with CryoSPARC homogeneous refinement, C2 symmetry."
 >
 > ### Tools (14 across 3 tiers)

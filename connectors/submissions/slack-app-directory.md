@@ -9,7 +9,7 @@ Target: https://api.slack.com/apps/{app-id}/general → "Submit to App Directory
 | Field | Value |
 |---|---|
 | App name | BioMate AI |
-| Short description (140) | Run real bioinformatics workflows (nf-core, CryoSPARC, AlphaFold, ADMET) from Slack. AWS Batch backend, QC gates, methods reports. |
+| Short description (140) | Run real bioinformatics workflows (RNA-seq/WGS, CryoSPARC, AlphaFold, ADMET) from Slack. BioMate cloud backend, QC gates, methods reports. |
 | Long description | See [`description-long.md`](./description-long.md) |
 | Category | Productivity → Workflows |
 | Pricing | Free for individual use; usage-based platform fee on biomate.ai |

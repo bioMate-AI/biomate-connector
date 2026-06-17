@@ -1,6 +1,6 @@
 # BioMate × Slack
 
-> Run real bioinformatics from your lab's Slack workspace. `/biomate run …` kicks off a workflow on AWS Batch; the bot threads progress and posts the final report.
+> Run real bioinformatics from your lab's Slack workspace. `/biomate run …` kicks off a workflow on BioMate cloud; the bot threads progress and posts the final report.
 
 ## Install
 
@@ -11,7 +11,7 @@ After install, each user runs `/biomate login` in any channel where the app is p
 ## Try it
 
 ```
-/biomate run nf-core/rnaseq on s3://biomate-demo/rnaseq/, treated vs control, GRCh38
+/biomate run RNA-seq pipeline on s3://biomate-demo/rnaseq/, treated vs control, GRCh38
 ```
 
 ```

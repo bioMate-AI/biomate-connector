@@ -18,8 +18,8 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from galaxy.connectors.oauth import Client, OAuthServer, OAuthStore
-from galaxy.connectors.oauth import router as oauth_router_mod
+from biomate_connector.oauth import Client, OAuthServer, OAuthStore
+from biomate_connector.oauth import router as oauth_router_mod
 
 
 CLIENT_ID = "biomate-cursor"
@@ -83,7 +83,7 @@ def test_authorize_unauthenticated_returns_401(client_anonymous):
 
     NOTE: the real production path is a 302→/login redirect, performed inside
     `authorize_get` after the dependency is resolved. Here we only verify that
-    the dependency raises 401 — Galaxy's session middleware handles the redirect.
+    the dependency raises 401 — BioMate's session middleware handles the redirect.
     """
     _, ch = _pkce_pair()
     r = client_anonymous.get(

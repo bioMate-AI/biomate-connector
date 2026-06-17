@@ -491,6 +491,6 @@ def test_mcp_legacy_tool_aliases_still_work(mcp_server):
     _send(mcp_server, {"jsonrpc": "2.0", "id": 50, "method": "tools/call",
                        "params": {"name": "get_run_status", "arguments": {"run_id": "run-mock-1"}}})
     resp = _read_one(mcp_server)
-    # Mock backend returns 404 for /api/nextflow/runs/.../status, but the dispatcher
+    # Mock backend returns 404 for /api/pipeline/runs/.../status, but the dispatcher
     # should still resolve the call (not return -32601 Method not found).
     assert resp.get("error", {}).get("code") != -32601, "legacy alias must still dispatch"

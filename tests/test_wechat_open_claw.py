@@ -155,7 +155,7 @@ class TestOpenClawQuery(unittest.TestCase):
 
     def test_workflow_id_extracted_from_tool_result(self):
         events = [
-            ("workflow_ready", {"workflow_name": "rnaseq_differential", "workflow_type": "nextflow"}),
+            ("workflow_ready", {"workflow_name": "rnaseq_differential", "workflow_type": "pipeline"}),
             ("delta", {"text": "Found rnaseq_differential workflow."}),
             ("done", {}),
         ]

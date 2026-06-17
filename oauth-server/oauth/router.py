@@ -1,7 +1,7 @@
 """FastAPI adapter for the OAuth 2.1 + PKCE server.
 
-Mount this router under `/oauth` in the Galaxy ASGI app. Authentication for
-the `/authorize` flow is delegated to Galaxy's existing session middleware via
+Mount this router under `/oauth` in the BioMate backend. Authentication for
+the `/authorize` flow is delegated to BioMate's session middleware via
 the `current_user_id` dependency; if the user is unauthenticated they are
 redirected to the login page with a `next=` parameter pointing back here.
 """
@@ -26,7 +26,7 @@ _server: Optional[OAuthServer] = None
 
 
 def set_server(server: OAuthServer) -> None:
-    """Production startup hook — call once during Galaxy ASGI app boot."""
+    """Production startup hook — call once during BioMate backend boot."""
     global _server
     _server = server
 
@@ -46,7 +46,7 @@ def get_server() -> OAuthServer:
 def current_user_id(request: Request) -> str:
     """Extract authenticated user_id from session cookie or X-API-Key header.
 
-    Galaxy's session middleware sets `request.state.user_id` upstream. For
+    BioMate's session middleware sets `request.state.user_id` upstream. For
     headless installer flows we also accept `Authorization: Bearer <token>`
     against an existing connector token (allows token-only re-consent).
     """

@@ -26,7 +26,7 @@ os.environ.setdefault(
     base64.urlsafe_b64encode(secrets.token_bytes(64)).decode(),
 )
 
-from galaxy.connectors.oauth import (  # noqa: E402
+from biomate_connector.oauth import (  # noqa: E402
     AuthorizeError,
     AuthorizeRequest,
     Client,

@@ -1,6 +1,6 @@
 # BioMate Connectors
 
-> Real bioinformatics — `nf-core/sarek`, CryoSPARC, AlphaFold, ADMET, PBPK, OpenMM, GROMACS — from your favorite AI coding assistant or chat surface.
+> Real bioinformatics — `WGS variant-calling pipeline`, CryoSPARC, AlphaFold, ADMET, PBPK, OpenMM, GROMACS — from your favorite AI coding assistant or chat surface.
 
 | Surface | Install | Status |
 |---|---|---|
@@ -20,13 +20,13 @@ Connect once, then ask anywhere:
 
 > Screen aspirin and caffeine for hERG and CYP3A4 inhibition.
 
-> Run nf-core/rnaseq differential expression on s3://biomate-demo/rnaseq/, treated vs control.
+> Run RNA-seq pipeline differential expression on s3://biomate-demo/rnaseq/, treated vs control.
 
 > Refine this particle stack with CryoSPARC homogeneous refinement.
 
 > Look up UniProt P04637 and summarize cancer-associated mutations.
 
-Each prompt finds the right workflow from 2,455 indexed pipelines, fills required parameters, launches on AWS Batch, and streams phase/step/QC/finding events back to your chat surface in real time.
+Each prompt finds the right workflow from 2,455 indexed pipelines, fills required parameters, launches on BioMate cloud, and streams phase/step/QC/finding events back to your chat surface in real time.
 
 ## Architecture
 
@@ -42,12 +42,12 @@ Each prompt finds the right workflow from 2,455 indexed pipelines, fills require
                        ↓
                 BioMate execution engine
                   │   │   │   │
-                AWS  ECR  S3  Galaxy
+                Cloud execution engine  BioMate
                 Batch  workflows
 ```
 
 - **One source of truth for tools** — [`backend/lib/mcp/tools_manifest.py`](../backend/lib/mcp/tools_manifest.py) defines 14 tools across 3 tiers. Every surface generates its schema from this file; a CI drift test fails the build if they diverge.
-- **One OAuth 2.1 + PKCE service** — [`backend/lib/galaxy/connectors/oauth/`](../backend/lib/galaxy/connectors/oauth/). Scopes are per-surface; revoke individual surfaces at https://biomate.ai/account/connectors.
+- **One OAuth 2.1 + PKCE service** — [`oauth-server/`](../oauth-server/). Scopes are per-surface; revoke individual surfaces at https://biomate.ai/account/connectors.
 - **One streaming event format** — every progress event carries `kind`, `summary_md`, `view_url`, optional `thumbnail_png_b64`, plus a structured `delta`. Hosts that support `notifications/progress` (Claude Code, Cursor) render the event timeline; hosts that don't (Codex, Slack, WeChat) poll a paired tool and get the same payloads.
 
 ## What's different from a generic "run code" tool
@@ -55,7 +55,7 @@ Each prompt finds the right workflow from 2,455 indexed pipelines, fills require
 | | Generic | BioMate |
 |---|---|---|
 | Workflow catalog | None | 2,455 indexed pipelines across 34 domains |
-| Execution | Local sandbox | AWS Batch with GPU support |
+| Execution | Local sandbox | BioMate cloud with GPU support |
 | QC gates | None | ADMET hERG, RNA-seq STAR mapping %, CryoSPARC FSC 0.143 — automatic |
 | Auto-remediation | None | Auto-loop suggests + tries new params on gate failure |
 | Reports | None | Methods + QC + findings as IND/CRO-ready PDF |
@@ -97,7 +97,7 @@ connectors/
 ├── wechat/            # WeChat-native branding
 └── slack/             # Slack App bot
 backend/lib/mcp/                       # Tools manifest (single source of truth)
-backend/lib/galaxy/connectors/oauth/   # OAuth 2.1 + PKCE server
+oauth-server/   # OAuth 2.1 + PKCE server
 skills/biomate/                        # Claude Skill bundle (catalog + render templates + OAuth)
 ```
 

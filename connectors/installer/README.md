@@ -2,7 +2,7 @@
 
 > One-line installer that wires BioMate AI into Claude Code, Claude Desktop, Cursor, OpenAI Codex, ChatGPT, and Open Claw (WeChat).
 
-Real bioinformatics — `nf-core/sarek`, CryoSPARC, AlphaFold, ADMET screens, PBPK — runs from your favorite AI coding assistant. No SaaS lock-in: tokens are stored locally and revocable per-surface from your BioMate account.
+Real bioinformatics — `WGS variant-calling pipeline`, CryoSPARC, AlphaFold, ADMET screens, PBPK — runs from your favorite AI coding assistant. No SaaS lock-in: tokens are stored locally and revocable per-surface from your BioMate account.
 
 ## Install
 

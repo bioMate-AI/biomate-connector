@@ -2,7 +2,7 @@
 
 **Duration target:** 75 seconds
 **Surface:** OpenAI Codex CLI
-**Workflow exercised:** nf-core/sarek WGS variant calling
+**Workflow exercised:** WGS variant-calling pipeline WGS variant calling
 
 ## Pre-roll
 
@@ -17,7 +17,7 @@
 Type:
 
 ```bash
-codex "Run nf-core/sarek WGS variant calling on samples in s3://biomate-demo/wgs/. GRCh38. GATK best-practices. Annotate with VEP."
+codex "Run WGS variant-calling pipeline WGS variant calling on samples in s3://biomate-demo/wgs/. GRCh38. GATK best-practices. Annotate with VEP."
 ```
 
 ### Beat 2 — Run (0:08–1:05)
@@ -25,7 +25,7 @@ codex "Run nf-core/sarek WGS variant calling on samples in s3://biomate-demo/wgs
 Codex picks the BioMate tool, calls `biomate_session`. Output streams as markdown:
 
 ```
-Using BioMate workflow 12849 (nf-core/sarek)…
+Using BioMate workflow 12849 (WGS variant-calling pipeline)…
 
 ▸ FastQ → BAM (BWA-MEM2)            [running 4/4 samples]
 ▸ Mark duplicates                    pending

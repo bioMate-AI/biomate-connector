@@ -21,7 +21,7 @@ The installer opens your browser, runs OAuth 2.1 + PKCE against `biomate.ai`, an
 ```
 
 ```
-> Run nf-core/rnaseq differential expression on these FASTQs:
+> Run RNA-seq pipeline differential expression on these FASTQs:
   s3://biomate-demo/treated_R1.fq.gz, s3://biomate-demo/treated_R2.fq.gz
   s3://biomate-demo/control_R1.fq.gz, s3://biomate-demo/control_R2.fq.gz
   Compare treated vs control, GRCh38.
@@ -43,7 +43,7 @@ Claude Code gains 14 MCP tools across 3 tiers:
 
 ### Tier 1 — Streaming agentic tool (the wow tool)
 
-- **`biomate_session`** — natural-language goal in, BioMate orchestrates: searches the 2,455-workflow catalog, fills required parameters, submits to AWS Batch, streams phase + step + QC + finding events back as `notifications/progress`. Claude renders the live timeline inline.
+- **`biomate_session`** — natural-language goal in, BioMate orchestrates: searches the 2,455-workflow catalog, fills required parameters, submits to BioMate cloud, streams phase + step + QC + finding events back as `notifications/progress`. Claude renders the live timeline inline.
 
 ### Tier 2 — Workflow primitives
 
@@ -70,9 +70,9 @@ Claude Code gains 14 MCP tools across 3 tiers:
 
 ## Why it's different
 
-- **It actually runs.** Not "explain how to run nf-core/sarek" — Claude Code starts the run on AWS Batch and streams progress back. Same execution backend as biomate.ai/runs.
+- **It actually runs.** Not "explain how to run WGS variant-calling pipeline" — Claude Code starts the run on BioMate cloud and streams progress back. Same execution engine as biomate.ai/runs.
 - **No surface lock-in.** Same OAuth, same tools across Claude Code, Cursor, Codex, ChatGPT. Switch hosts without re-onboarding.
-- **2,455 indexed workflows.** Including all of nf-core, CryoSPARC, AlphaFold/ESMFold/OpenFold, OpenMM/GROMACS, AutoDock Vina, RDKit, DESeq2/edgeR/limma, Seurat, scanpy, BOIN, NONMEM/nlmixr2, and 1000+ Bioconductor packages.
+- **2,455 indexed workflows.** Including 400+ community bioinformatics pipelines, CryoSPARC, AlphaFold/ESMFold/OpenFold, OpenMM/GROMACS, AutoDock Vina, RDKit, DESeq2/edgeR/limma, Seurat, scanpy, BOIN, NONMEM/nlmixr2, and 1000+ Bioconductor packages.
 - **Auto-loop QC.** ADMET hERG too high? BioMate's auto-loop re-suggests parameters; Claude shows the diff inline.
 
 ## Manual config (advanced)

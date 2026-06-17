@@ -8,13 +8,13 @@ Open a PR adding BioMate to the README's "Third-party servers" table.
 
 ## PR title
 
-`Add BioMate — bioinformatics workflow execution (nf-core, CryoSPARC, AlphaFold, ADMET)`
+`Add BioMate — bioinformatics workflow execution (RNA-seq/WGS, CryoSPARC, AlphaFold, ADMET)`
 
 ## PR body
 
 > Adds BioMate AI to the third-party MCP server list.
 >
-> **What it does:** BioMate is an MCP server that runs real bioinformatics workflows on AWS Batch. 2,455 indexed pipelines including all of nf-core, CryoSPARC, AlphaFold/ESMFold/OpenFold, OpenMM, GROMACS, AutoDock Vina, the Bioconductor ecosystem, and ~60 custom drug-discovery workflows (PBPK, BOIN, ADMET, IND §2.6.1).
+> **What it does:** BioMate is an MCP server that runs real bioinformatics workflows on BioMate cloud. 2,455 indexed pipelines including 400+ community bioinformatics pipelines, CryoSPARC, AlphaFold/ESMFold/OpenFold, OpenMM, GROMACS, AutoDock Vina, the Bioconductor ecosystem, and ~60 custom drug-discovery workflows (PBPK, BOIN, ADMET, IND §2.6.1).
 >
 > **Tools (14 across 3 tiers):** one agentic streaming tool (`biomate_session`), six workflow primitives (`search_workflow`, `get_workflow_spec`, `run_workflow`, `cancel_run`, `list_runs`, `get_run`), seven outputs/analysis/reporting tools.
 >
@@ -29,7 +29,7 @@ Open a PR adding BioMate to the README's "Third-party servers" table.
 ## Table row to add (alphabetical)
 
 ```markdown
-| [BioMate](https://github.com/bioMate-AI/biomate-connectors) | Run real bioinformatics workflows (nf-core, CryoSPARC, AlphaFold, ADMET, PBPK) on AWS Batch from chat. 2,455 indexed pipelines, OAuth 2.1, streaming progress events. | `npx @biomate/connect claude-code` |
+| [BioMate](https://github.com/bioMate-AI/biomate-connectors) | Run real bioinformatics workflows (RNA-seq/WGS, CryoSPARC, AlphaFold, ADMET, PBPK) on BioMate cloud from chat. 2,455 indexed pipelines, OAuth 2.1, streaming progress events. | `npx @biomate/connect claude-code` |
 ```
 
 ## Pre-submission checklist

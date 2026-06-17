@@ -53,14 +53,14 @@
   <rect x="160" y="315" width="580" height="70" rx="10" fill="#fdf4ff" stroke="#a855f7" stroke-width="1.5"/>
   <text x="450" y="337" text-anchor="middle" font-size="12" font-weight="600" fill="#7e22ce">BioMate API  (api.biomate.ai)</text>
   <text x="450" y="357" text-anchor="middle" font-size="10" fill="#9333ea">Workflow search · Run execution · File preview · Biological DB queries · Memory · Reporting</text>
-  <text x="450" y="374" text-anchor="middle" font-size="10" fill="#9333ea">2,455 Nextflow workflows across 34 biological domains</text>
+  <text x="450" y="374" text-anchor="middle" font-size="10" fill="#9333ea">2,455 pipeline workflows across 34 biological domains</text>
 
   <!-- Arrow down to AWS -->
   <line x1="450" y1="385" x2="450" y2="415" stroke="#6b7280" stroke-width="1.5" marker-end="url(#arr)"/>
 
   <!-- ═══ AWS BATCH ═══ -->
   <rect x="280" y="417" width="340" height="44" rx="10" fill="#fff7ed" stroke="#f97316" stroke-width="1.5"/>
-  <text x="450" y="437" text-anchor="middle" font-size="11" font-weight="600" fill="#c2410c">AWS Batch  —  workflow execution</text>
+  <text x="450" y="437" text-anchor="middle" font-size="11" font-weight="600" fill="#c2410c">BioMate cloud  —  workflow execution</text>
   <text x="450" y="453" text-anchor="middle" font-size="10" fill="#ea580c">RNA-seq · WGS · CryoEM · ADMET · PBPK · docking · proteomics …</text>
 
   <!-- ═══ LAB INSTRUMENTS (bottom left) ═══ -->

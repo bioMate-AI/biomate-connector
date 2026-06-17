@@ -52,7 +52,7 @@ the test is wrong.
   `biomate-codex` clients registered (needed for cross-client code-replay test)
 - `app_client`: TestClient + the two-client server, with same monkeypatch
   pattern as `oauth_router.md`
-- `monkeypatch.setattr("galaxy.connectors.oauth.store.now", ...)`: clock
+- `monkeypatch.setattr("biomate_connector.oauth.store.now", ...)`: clock
   control for testing expired authorization codes
 
 ## When it fails

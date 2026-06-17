@@ -48,7 +48,7 @@ Screen aspirin and caffeine for hERG inhibition and CYP3A4 metabolism. Block if 
   ```
 - Total runtime: ~35 seconds on Batch
 
-**Caption overlay:** `Real run on AWS Batch — not a local mock`
+**Caption overlay:** `Real run on BioMate cloud — not a local mock`
 
 ### Beat 3 — Payoff (0:50–0:60)
 
@@ -62,7 +62,7 @@ Screen aspirin and caffeine for hERG inhibition and CYP3A4 metabolism. Block if 
 
 ## Voiceover (optional)
 
-> "Generic AI can write code about hERG screening. Claude Code with BioMate **runs it** — on AWS Batch, with QC gates, and gives you the methods PDF for your IND submission. Connect in 30 seconds."
+> "Generic AI can write code about hERG screening. Claude Code with BioMate **runs it** — on BioMate cloud, with QC gates, and gives you the methods PDF for your IND submission. Connect in 30 seconds."
 
 ## Notes for editor
 

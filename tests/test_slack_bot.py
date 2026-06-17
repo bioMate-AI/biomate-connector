@@ -129,7 +129,7 @@ class TestChatStreamQuery(unittest.TestCase):
         """workflow_ready event supplies workflow_name."""
         events = [
             ("delta", {"text": "I recommend the ADMET workflow."}),
-            ("workflow_ready", {"workflow_name": "predict_admet_properties", "workflow_type": "nextflow"}),
+            ("workflow_ready", {"workflow_name": "predict_admet_properties", "workflow_type": "pipeline"}),
             ("done", {}),
         ]
         with MockSSEServer(events=events) as srv:
@@ -157,7 +157,7 @@ class TestChatStreamQuery(unittest.TestCase):
         """final event's workflow.workflow_name fills in when workflow_ready is absent."""
         events = [
             ("delta", {"text": "Running ADMET."}),
-            ("final", {"workflow": {"success": True, "workflow_name": "admet_v2", "nextflow_path": "admet/main.nf"}}),
+            ("final", {"workflow": {"success": True, "workflow_name": "admet_v2", "pipeline_path": "admet/main.nf"}}),
             ("done", {}),
         ]
         with MockSSEServer(events=events) as srv:

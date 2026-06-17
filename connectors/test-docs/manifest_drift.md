@@ -48,7 +48,7 @@ These three additional cases should be appended to `test_tools_manifest.py`. Stu
 ```python
 def test_chatgpt_openapi_matches_manifest():
     import json
-    from galaxy.mcp.tools_manifest import all_tools
+    from mcp.tools_manifest import all_tools
     with open("connectors/chatgpt/openapi.json") as f:
         spec = json.load(f)
     op_ids = {op["operationId"] for path in spec["paths"].values() for op in path.values() if "operationId" in op}
@@ -57,7 +57,7 @@ def test_chatgpt_openapi_matches_manifest():
     assert not missing_in_openapi, f"Tools missing from ChatGPT OpenAPI: {missing_in_openapi}"
 
 def test_skill_tool_catalog_lists_all_tools():
-    from galaxy.mcp.tools_manifest import all_tools
+    from mcp.tools_manifest import all_tools
     with open("skills/biomate/references/tool_catalog.md") as f:
         catalog = f.read()
     for tool in all_tools():
@@ -66,7 +66,7 @@ def test_skill_tool_catalog_lists_all_tools():
 def test_open_claw_tools_matches_manifest():
     """Greps frontend/server/routes.ts for OPEN_CLAW_TOOLS entries."""
     import re
-    from galaxy.mcp.tools_manifest import all_tools
+    from mcp.tools_manifest import all_tools
     with open("frontend/server/routes.ts") as f:
         routes = f.read()
     open_claw = re.search(r"OPEN_CLAW_TOOLS\s*=\s*\[(.*?)\];", routes, re.DOTALL)

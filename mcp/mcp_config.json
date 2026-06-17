@@ -20,7 +20,7 @@
     },
     {
       "name": "get_workflow_params",
-      "description": "Return typed parameter schema (nextflow_schema.json) for a workflow",
+      "description": "Return typed parameter schema (pipeline_schema.json) for a workflow",
       "category": "discovery"
     },
     {
@@ -50,7 +50,7 @@
     },
     {
       "name": "rerun_workflow",
-      "description": "Resume a failed run using Nextflow -resume (caches completed tasks)",
+      "description": "Resume a failed run using pipeline -resume (caches completed tasks)",
       "category": "execution"
     }
   ],
@@ -98,11 +98,11 @@
   "related_mcp_servers": {
     "alphafold": "backend/auto_update/mcp_servers/AlphaFold-MCP-Server/build/index.js",
     "chai1": "backend/auto_update/mcp_servers/chai1_mcp_server.py",
-    "pubmed": "backend/biomni_workflows/galaxy/tools/biomni/_lib/example_mcp_tools/pubmed_mcp.py"
+    "pubmed": "mcp/plugins/pubmed_mcp.py"
   },
 
   "lab_automation": {
-    "note": "PyLabRobot (Hamilton STAR) integration in backend/biomni_workflows/galaxy/tools/biomni/_lib/lab_automation.py",
+    "note": "PyLabRobot (Hamilton STAR) integration in lab_instruments/sila2_adapter.py",
     "supported_robots": ["Hamilton STAR", "Hamilton STARlet"],
     "doc_tool": "get_pylabrobot_documentation_liquid",
     "test_tool": "test_pylabrobot_script"

@@ -21,8 +21,8 @@ This is a shortlist for fast retrieval — pick a workflow_id from here directly
 
 | workflow_id | Use when… |
 |---|---|
-| `nfcore_rnaseq` | nf-core/rnaseq — bulk RNA-seq from FASTQ to gene counts + DE |
-| `nfcore_scrnaseq` | nf-core/scrnaseq — single-cell RNA-seq (10x, Smart-seq) |
+| `nfcore_rnaseq` | RNA-seq pipeline — bulk RNA-seq from FASTQ to gene counts + DE |
+| `nfcore_scrnaseq` | bioinformatics scrnaseq — single-cell RNA-seq (10x, Smart-seq) |
 | `deseq2_de` | DESeq2 differential expression on a counts matrix |
 | `edger_de` | edgeR differential expression alternative |
 | `limma_voom_de` | limma-voom for low-count or microarray-like data |
@@ -34,11 +34,11 @@ This is a shortlist for fast retrieval — pick a workflow_id from here directly
 
 | workflow_id | Use when… |
 |---|---|
-| `nfcore_sarek` | nf-core/sarek — germline / somatic variant calling from FASTQ |
+| `nfcore_sarek` | WGS variant-calling pipeline — germline / somatic variant calling from FASTQ |
 | `gatk_haplotypecaller` | GATK HaplotypeCaller germline only |
 | `mutect2_somatic` | Mutect2 somatic variant calling |
 | `manta_sv` | Manta structural variant calling |
-| `nfcore_methylseq` | nf-core/methylseq — WGBS / RRBS methylation |
+| `nfcore_methylseq` | bioinformatics methylseq — WGBS / RRBS methylation |
 | `bcftools_norm_filter` | VCF normalization + filtering |
 | `vep_annotate` | Ensembl VEP annotation of a VCF |
 
@@ -65,8 +65,8 @@ This is a shortlist for fast retrieval — pick a workflow_id from here directly
 
 | workflow_id | Use when… |
 |---|---|
-| `nfcore_chipseq` | nf-core/chipseq |
-| `nfcore_atacseq` | nf-core/atacseq |
+| `nfcore_chipseq` | bioinformatics chipseq |
+| `nfcore_atacseq` | bioinformatics atacseq |
 | `macs3_peakcall` | MACS3 peak calling |
 | `homer_motif` | HOMER motif discovery |
 

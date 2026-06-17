@@ -8,11 +8,11 @@
 
 If you've tried using an AI assistant for a bioinformatics task — RNA-seq, variant calling, ADMET, cryo-EM — you've hit the same wall:
 
-> The model writes you a Nextflow config. Or a snakemake rule. Or a Python script that imports DESeq2. Then it stops, because it can't actually run any of it.
+> The model writes you a pipeline config. Or a snakemake rule. Or a Python script that imports DESeq2. Then it stops, because it can't actually run any of it.
 
 That gap — between "tell me what to do" and "do it" — is BioMate.
 
-We've spent the last 14 months building an **execution engine**: 2,455 indexed workflows across 34 biological domains, all of nf-core's drug-development and genomics pipelines, CryoSPARC, AlphaFold, OpenMM, GROMACS, AutoDock Vina, the Bioconductor ecosystem, and ~60 custom workflows for drug discovery (PBPK, BOIN, ADMET, IND §2.6.1 narrative generation, …). It runs on AWS Batch (with GPU queues for the protein and cryo-EM workloads), with auto-loop QC gates that catch and try to remediate failures, and produces FDA-formatted methods reports for IND / CRO submissions.
+We've spent the last 14 months building an **execution engine**: 2,455 indexed workflows across 34 biological domains, 400+ community bioinformatics pipelines's drug-development and genomics pipelines, CryoSPARC, AlphaFold, OpenMM, GROMACS, AutoDock Vina, the Bioconductor ecosystem, and ~60 custom workflows for drug discovery (PBPK, BOIN, ADMET, IND §2.6.1 narrative generation, …). It runs on BioMate cloud (with GPU queues for the protein and cryo-EM workloads), with auto-loop QC gates that catch and try to remediate failures, and produces FDA-formatted methods reports for IND / CRO submissions.
 
 Until today, you used it from `biomate.ai`. Today, you can use it from **wherever you already work**.
 
@@ -37,10 +37,10 @@ A Slack app is in private beta with three pilot labs and will ship publicly in 2
 > Screen aspirin and caffeine for hERG and CYP3A4 inhibition.
 ```
 
-Pick the ADMET pipeline from the catalog. Normalize the SMILES. Run DeepPK on AWS Batch. Compute the QC gate (hERG IC50 < 10μM blocks; CYP3A4 inhibition ratio > 0.5 flags). Return a structured result + a methods PDF.
+Pick the ADMET pipeline from the catalog. Normalize the SMILES. Run DeepPK on BioMate cloud. Compute the QC gate (hERG IC50 < 10μM blocks; CYP3A4 inhibition ratio > 0.5 flags). Return a structured result + a methods PDF.
 
 ```
-> Run nf-core/rnaseq differential expression on s3://biomate-demo/rnaseq/treated vs control, GRCh38.
+> Run RNA-seq pipeline differential expression on s3://biomate-demo/rnaseq/treated vs control, GRCh38.
 ```
 
 Find the FASTQs. Build the sample sheet. Submit STAR + salmon + DESeq2. Show the top-20 DE table inline with a volcano plot thumbnail. Five minutes, six samples, about forty cents.
@@ -81,7 +81,7 @@ Want to revoke Cursor's access but keep Claude Code? Hit `/oauth/grants/revoke` 
 
 ## What's special about this — and what isn't
 
-- **Special:** running real nf-core / CryoSPARC / AlphaFold from chat. Not running a code interpreter. Not running a Python sandbox. Running the same pipelines that produce IND submissions and Nature methods sections.
+- **Special:** running real RNA-seq/WGS, CryoSPARC, AlphaFold from chat. Not running a code interpreter. Not running a Python sandbox. Running the same pipelines that produce IND submissions and Nature methods sections.
 - **Special:** auto-loop QC. When a hERG IC50 fails, BioMate's auto-loop suggests revised parameters (e.g. a logP filter cutoff) and tries again — and the chat surface shows you the parameter diff as a was→now table.
 - **Special:** methods reports. Every run produces a 5–15 page PDF with methods, parameters, QC results, and citations to the underlying tools. IND-ready, manuscript-ready.
 - **Not special:** the MCP protocol. We use the standard one. The connectors are public OSS. Anyone can fork them; anyone can build similar bridges to their own execution engine.

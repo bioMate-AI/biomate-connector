@@ -20,7 +20,7 @@ Configuration (environment variables):
 
 MCP tools exposed:
     search_workflow     Search BioMate workflow catalog by natural language query
-    run_workflow        Execute a workflow with parameters on AWS Batch
+    run_workflow        Execute a workflow with parameters on BioMate cloud
     get_run_status      Poll status of a running workflow execution
     get_run_results     Retrieve output files from a completed run
     query_database      Query a biological database (UniProt, PDB, NCBI Gene, etc.)
@@ -126,7 +126,7 @@ class BioMateClient:
     def get_run_status(self, run_id: str) -> Dict[str, Any]:
         try:
             r = self.session.get(
-                self._url(f"/api/nextflow/runs/{run_id}/status"),
+                self._url(f"/api/pipeline/runs/{run_id}/status"),
                 timeout=10,
             )
             r.raise_for_status()
@@ -137,7 +137,7 @@ class BioMateClient:
     def get_run_results(self, run_id: str) -> Dict[str, Any]:
         try:
             r = self.session.get(
-                self._url(f"/api/nextflow/runs/{run_id}/outputs"),
+                self._url(f"/api/pipeline/runs/{run_id}/outputs"),
                 timeout=15,
             )
             r.raise_for_status()
@@ -343,7 +343,7 @@ class BioMateClient:
     def execute_workflow(self, workflow_def: Dict[str, Any]) -> Dict[str, Any]:
         """POST /api/workflows/execute with the workflow definition.
 
-        Returns {runId, galaxyInvocationId, nextflowRunId, status, ...} on success
+        Returns {runId, runInvocationId, pipelineRunId, status, ...} on success
         or {error: ...} on failure.
         """
         payload: Dict[str, Any] = {
@@ -353,7 +353,7 @@ class BioMateClient:
                 # Bypass the scientific confidence gate — the AI already assessed
                 # the workflow is appropriate for this goal.
                 "allowLowConfidence": True,
-                "nextflow_profile": os.environ.get("BIOMATE_NEXTFLOW_PROFILE", "aws"),
+                "pipeline_profile": os.environ.get("BIOMATE_NEXTFLOW_PROFILE", "aws"),
             },
         }
         try:
@@ -490,7 +490,7 @@ def _normalize_sse_event(evt: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         return None
 
     if name == "qc_gate_triggered":
-        # Emitted directly by NextflowQCGateHandler when a gate fires.
+        # Emitted directly by pipelineQCGateHandler when a gate fires.
         verdict = data.get("verdict", "halt")
         metric = data.get("metric") or "?"
         value = data.get("value") or "?"
@@ -667,11 +667,11 @@ class SessionRunner(threading.Thread):
             return
 
         invocation_id: Optional[str] = (
-            exec_result.get("galaxyInvocationId")
+            exec_result.get("runInvocationId")
             or exec_result.get("runId")
         )
         run_id: Optional[str] = (
-            exec_result.get("nextflowRunId")
+            exec_result.get("pipelineRunId")
             or exec_result.get("runId")
         )
         self._final_run_id = invocation_id or run_id

@@ -3,7 +3,7 @@
 Default backend is SQLite (file path from BIOMATE_OAUTH_DB env var, defaults to
 `/var/lib/biomate/oauth.db`). The store is intentionally narrow — three tables
 and ~10 methods — so an alternate backend (Postgres via SQLAlchemy in the main
-Galaxy process) can implement the same interface.
+BioMate process) can implement the same interface.
 """
 
 from __future__ import annotations

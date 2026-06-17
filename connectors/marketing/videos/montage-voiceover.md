@@ -11,11 +11,11 @@
 > Connect once — Claude Code, Claude Desktop, Cursor, Codex, ChatGPT, WeChat — and ask anywhere:
 >
 > 'Screen these compounds for hERG inhibition.'
-> 'Run nf-core RNA-seq on this S3 bucket.'
+> 'Run RNA-seq on this S3 bucket.'
 > 'Refine this CryoSPARC particle stack.'
 > 'Generate an IND nonclinical narrative from my last three runs.'
 >
-> Each prompt picks the right pipeline from twenty-four hundred indexed workflows, fills the parameters, launches on AWS Batch, and streams phase, step, QC, and finding events back to your chat surface in real time.
+> Each prompt picks the right pipeline from twenty-four hundred indexed workflows, fills the parameters, launches on BioMate cloud, and streams phase, step, QC, and finding events back to your chat surface in real time.
 >
 > One OAuth. One MCP surface. Six places to use it.
 >

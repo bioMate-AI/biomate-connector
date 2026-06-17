@@ -14,7 +14,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
 
-from galaxy.connectors.oauth import Client, OAuthStore  # noqa: E402
+from biomate_connector.oauth import Client, OAuthStore  # noqa: E402
 
 CLIENTS = [
     Client(

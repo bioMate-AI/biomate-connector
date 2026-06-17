@@ -18,7 +18,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from galaxy.connectors.oauth import (
+from biomate_connector.oauth import (
     Client,
     OAuthServer,
     OAuthStore,
@@ -26,8 +26,8 @@ from galaxy.connectors.oauth import (
     issue_access_token,
     AccessTokenClaims,
 )
-from galaxy.connectors.oauth import router as oauth_router_mod
-from galaxy.connectors.oauth.tokens import (
+from biomate_connector.oauth import router as oauth_router_mod
+from biomate_connector.oauth.tokens import (
     ACCESS_TOKEN_TTL_SECONDS,
     AUTHZ_CODE_TTL_SECONDS,
     now,
@@ -111,7 +111,7 @@ def test_refresh_tokens_stored_hashed_not_plaintext(two_clients_server, tmp_path
     server = two_clients_server
     v, c = _pkce_pair()
     # Drive a token issue.
-    from galaxy.connectors.oauth import AuthorizeRequest
+    from biomate_connector.oauth import AuthorizeRequest
     req = AuthorizeRequest(
         response_type="code",
         client_id=CURSOR_ID,
@@ -266,7 +266,7 @@ def test_expired_authz_code_rejected(two_clients_server, monkeypatch):
     being consumed."""
     server = two_clients_server
     v, c = _pkce_pair()
-    from galaxy.connectors.oauth import AuthorizeRequest
+    from biomate_connector.oauth import AuthorizeRequest
     req = AuthorizeRequest(
         response_type="code", client_id=CURSOR_ID, redirect_uri=CURSOR_URI,
         code_challenge=c, code_challenge_method="S256", scope="runs:read",
@@ -276,13 +276,13 @@ def test_expired_authz_code_rejected(two_clients_server, monkeypatch):
 
     # Fast-forward the clock.
     future = now() + AUTHZ_CODE_TTL_SECONDS + 10
-    monkeypatch.setattr("galaxy.connectors.oauth.store.now", lambda: future)
+    monkeypatch.setattr("biomate_connector.oauth.store.now", lambda: future)
 
     result = server.exchange_code(
         grant_type="authorization_code",
         code=code, redirect_uri=CURSOR_URI, client_id=CURSOR_ID, code_verifier=v,
     )
-    from galaxy.connectors.oauth import AuthorizeError
+    from biomate_connector.oauth import AuthorizeError
     assert isinstance(result, AuthorizeError)
     assert result.error == "invalid_grant"
 
