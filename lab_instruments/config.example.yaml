@@ -1,0 +1,134 @@
+# BioMate Lab Connectors — Configuration
+# =========================================
+# Copy this file to config.yaml and fill in your instrument details.
+# Run with: python3 run.py --config config.yaml
+#
+# All fields marked (required) must be provided.
+# Fields marked (optional) have sensible defaults.
+
+# ── BioMate connection (required) ────────────────────────────────────────────
+biomate:
+  api_url: "https://app.biomate.ai"      # Your BioMate instance URL
+  api_key: "eyJhbGci..."                  # Your API key (from BioMate → Settings → API Keys)
+
+# ── Instruments ───────────────────────────────────────────────────────────────
+# Add any combination of the instruments below.
+# Comment out sections for instruments you don't have.
+
+instruments:
+
+  # ── Illumina BaseSpace ──────────────────────────────────────────────────────
+  # Polls BaseSpace cloud for completed sequencing runs.
+  # Triggers: RNA-seq, WGS, amplicon workflows on new COMPLETED runs.
+  basespace:
+    enabled: false
+    access_token: "YOUR_BASESPACE_ACCESS_TOKEN"   # From Illumina developer portal
+    project_id: "12345678"                         # BaseSpace project ID (optional — polls all if omitted)
+    poll_interval: 300                             # Seconds between polls (default: 300)
+    workflow_hint: "rnaseq"                        # Optional: hint to BioMate (rnaseq | wgs | amplicon)
+
+  # ── Nanopore MinKNOW ────────────────────────────────────────────────────────
+  # Monitors a GridION/Mk1C/PromethION running MinKNOW.
+  # Triggers: metagenomics, amplicon, cDNA workflows on run completion.
+  minknow:
+    enabled: false
+    host: "192.168.1.100"                          # IP of MinKNOW machine (or localhost)
+    port: 9501                                     # MinKNOW HTTP API port (default: 9501)
+    poll_interval: 30                              # Seconds between polls (default: 30)
+    workflow_hint: "metagenomics"                  # Optional: metagenomics | amplicon | cdna
+
+  # ── CryoEM EPU (file watcher mode) ─────────────────────────────────────────
+  # Watches a local directory for new .mrc / .mrcs / .tif micrograph files.
+  # Triggers: cryosparc_standard_spa workflow when a batch settles.
+  epu:
+    enabled: false
+    output_dirs:                                   # One or more directories to watch
+      - "/data/cryo/sessions"
+      # - "/data/cryo/sessions_2"
+    poll_interval: 60                              # Seconds between directory scans (default: 60)
+    min_movies: 50                                 # Minimum micrographs before triggering (default: 50)
+    settle_seconds: 300                            # Wait this long after last new file (default: 300 = 5 min)
+
+  # ── CryoEM EPU (REST API mode) ──────────────────────────────────────────────
+  # Alternative to file watcher: polls EPU's built-in REST API.
+  # Requires EPU v3.4+ with API enabled.
+  epu_api:
+    enabled: false
+    host: "192.168.1.200"                          # IP of EPU workstation
+    port: 8080                                     # EPU API port (default: 8080)
+    poll_interval: 60
+
+  # ── LC-MS (file watcher) ────────────────────────────────────────────────────
+  # Watches for new vendor data files: .raw (Thermo/Waters), .d (Bruker), .wiff (Sciex).
+  # Triggers: nfcore_proteomics_dda_thermo, nfcore_metabolomics_untargeted_bruker, etc.
+  lcms:
+    enabled: false
+    output_dirs:
+      - "/data/lcms/thermo-output"
+      # - "/data/lcms/bruker-output"
+    poll_interval: 30
+    settle_seconds: 120                            # Default: 120 seconds
+    acquisition_mode: "dda"                        # dda | dia | swath | mrm | untargeted
+
+  # ── Flow Cytometer (file watcher) ───────────────────────────────────────────
+  # Watches for new .fcs files from BD FACSAria, Beckman CytoFLEX, etc.
+  # Triggers: flowjo_analysis, facs_gating workflows.
+  flow_cytometer:
+    enabled: false
+    output_dirs:
+      - "/data/facs/export"
+    poll_interval: 30
+    settle_seconds: 60
+
+  # ── qPCR (file watcher) ─────────────────────────────────────────────────────
+  # Watches for .eds (Applied Biosystems QuantStudio) or .pcrd (Bio-Rad CFX) files.
+  # Triggers: qpcr_analysis, ddpcr_analysis workflows.
+  qpcr:
+    enabled: false
+    output_dirs:
+      - "/data/qpcr/exports"
+    poll_interval: 30
+    settle_seconds: 30
+
+  # ── Plate Reader (file watcher) ─────────────────────────────────────────────
+  # Watches for .xlsx plate reader exports from BioTek, Molecular Devices, etc.
+  # Triggers: dose_response_curve, elisa_analysis, cell_viability workflows.
+  plate_reader:
+    enabled: false
+    output_dirs:
+      - "/data/plate-reader/exports"
+    poll_interval: 30
+    settle_seconds: 30
+
+  # ── Opentrons OT-2 / Flex ───────────────────────────────────────────────────
+  # Connects to an Opentrons robot over HTTP for protocol generation and execution.
+  # The robot's IP is shown on the OT-2 touchscreen under About.
+  opentrons:
+    enabled: false
+    host: "169.254.x.x"                           # Robot IP (shown on OT-2 touchscreen)
+    port: 31950                                    # Opentrons HTTP API port (default: 31950)
+
+  # ── Benchling ELN ───────────────────────────────────────────────────────────
+  # Pulls experimental samples from Benchling entries; pushes results back.
+  # Requires: Benchling API key with read/write access to your Registry.
+  benchling:
+    enabled: false
+    api_url: "https://yourorg.benchling.com"       # Your Benchling tenant URL
+    api_key: "sk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    poll_interval: 300                             # Seconds between entry polls
+
+  # ── SiLA2 ───────────────────────────────────────────────────────────────────
+  # Connects to SiLA2-compliant lab devices (Hamilton, Sartorius, etc.) over gRPC.
+  # Note: SiLA2 gRPC support is currently a TCP connectivity stub.
+  # Full gRPC implementation is planned — see docs/20260607_CONNECTORS_HANDOFF.md §7.3
+  sila2:
+    enabled: false
+    device_ips:                                    # List of SiLA2 device IP addresses
+      - "192.168.1.101"
+      # - "192.168.1.102"
+    port: 50051                                    # SiLA2 default gRPC port
+
+# ── Logging ───────────────────────────────────────────────────────────────────
+logging:
+  level: "INFO"                                    # DEBUG | INFO | WARNING | ERROR
+  file: ""                                         # Log to file (empty = stdout only)

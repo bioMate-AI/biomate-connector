@@ -1,0 +1,125 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 520" font-family="system-ui,-apple-system,sans-serif">
+  <rect width="860" height="520" fill="#f8fafc"/>
+  <text x="430" y="34" text-anchor="middle" font-size="17" font-weight="600" fill="#0f172a">Information Flow — Lab Instrument to Result</text>
+
+  <!-- Step boxes -->
+  <!-- 1 -->
+  <rect x="30" y="70" width="140" height="80" rx="8" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.5"/>
+  <text x="100" y="94" text-anchor="middle" font-size="11" font-weight="700" fill="#1e40af">① Instrument</text>
+  <text x="100" y="110" text-anchor="middle" font-size="10" fill="#1d4ed8">Run finishes</text>
+  <text x="100" y="124" text-anchor="middle" font-size="10" fill="#1d4ed8">New data file</text>
+  <text x="100" y="138" text-anchor="middle" font-size="10" fill="#1d4ed8">or API event</text>
+
+  <!-- arrow -->
+  <line x1="170" y1="110" x2="210" y2="110" stroke="#64748b" stroke-width="1.5" marker-end="url(#a)"/>
+
+  <!-- 2 -->
+  <rect x="210" y="70" width="140" height="80" rx="8" fill="#dcfce7" stroke="#22c55e" stroke-width="1.5"/>
+  <text x="280" y="94" text-anchor="middle" font-size="11" font-weight="700" fill="#15803d">② Connector</text>
+  <text x="280" y="110" text-anchor="middle" font-size="10" fill="#16a34a">File watcher</text>
+  <text x="280" y="124" text-anchor="middle" font-size="10" fill="#16a34a">or API poll</text>
+  <text x="280" y="138" text-anchor="middle" font-size="10" fill="#16a34a">detects event</text>
+
+  <!-- arrow -->
+  <line x1="350" y1="110" x2="390" y2="110" stroke="#64748b" stroke-width="1.5" marker-end="url(#a)"/>
+
+  <!-- 3 -->
+  <rect x="390" y="70" width="140" height="80" rx="8" fill="#fdf4ff" stroke="#a855f7" stroke-width="1.5"/>
+  <text x="460" y="94" text-anchor="middle" font-size="11" font-weight="700" fill="#7e22ce">③ BioMate AI</text>
+  <text x="460" y="110" text-anchor="middle" font-size="10" fill="#9333ea">Selects workflow</text>
+  <text x="460" y="124" text-anchor="middle" font-size="10" fill="#9333ea">from 2,455 catalog</text>
+  <text x="460" y="138" text-anchor="middle" font-size="10" fill="#9333ea">fills params</text>
+
+  <!-- arrow -->
+  <line x1="530" y1="110" x2="570" y2="110" stroke="#64748b" stroke-width="1.5" marker-end="url(#a)"/>
+
+  <!-- 4 -->
+  <rect x="570" y="70" width="140" height="80" rx="8" fill="#fff7ed" stroke="#f97316" stroke-width="1.5"/>
+  <text x="640" y="94" text-anchor="middle" font-size="11" font-weight="700" fill="#c2410c">④ AWS Batch</text>
+  <text x="640" y="110" text-anchor="middle" font-size="10" fill="#ea580c">Nextflow pipeline</text>
+  <text x="640" y="124" text-anchor="middle" font-size="10" fill="#ea580c">executes on</text>
+  <text x="640" y="138" text-anchor="middle" font-size="10" fill="#ea580c">cloud compute</text>
+
+  <!-- arrow -->
+  <line x1="710" y1="110" x2="750" y2="110" stroke="#64748b" stroke-width="1.5" marker-end="url(#a)"/>
+
+  <!-- 5 -->
+  <rect x="750" y="70" width="80" height="80" rx="8" fill="#fef2f2" stroke="#ef4444" stroke-width="1.5"/>
+  <text x="790" y="100" text-anchor="middle" font-size="11" font-weight="700" fill="#b91c1c">⑤ Results</text>
+  <text x="790" y="116" text-anchor="middle" font-size="10" fill="#dc2626">Files +</text>
+  <text x="790" y="130" text-anchor="middle" font-size="10" fill="#dc2626">findings</text>
+
+  <!-- ── MCP path (human-in-loop) ── -->
+  <line x1="430" y1="180" x2="430" y2="220" stroke="#94a3b8" stroke-width="1" stroke-dasharray="4,3"/>
+  <text x="430" y="215" text-anchor="middle" font-size="10" fill="#64748b">OR via MCP (human-in-loop)</text>
+
+  <!-- MCP flow row -->
+  <rect x="30" y="240" width="140" height="70" rx="8" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.5"/>
+  <text x="100" y="264" text-anchor="middle" font-size="11" font-weight="700" fill="#1e40af">AI Assistant</text>
+  <text x="100" y="280" text-anchor="middle" font-size="10" fill="#1d4ed8">Claude / Cursor</text>
+  <text x="100" y="294" text-anchor="middle" font-size="10" fill="#1d4ed8">Slack / ChatGPT</text>
+
+  <line x1="170" y1="275" x2="210" y2="275" stroke="#64748b" stroke-width="1.5" marker-end="url(#a)"/>
+  <text x="190" y="268" text-anchor="middle" font-size="9" fill="#64748b">tools/call</text>
+
+  <rect x="210" y="240" width="140" height="70" rx="8" fill="#dcfce7" stroke="#22c55e" stroke-width="1.5"/>
+  <text x="280" y="264" text-anchor="middle" font-size="11" font-weight="700" fill="#15803d">MCP Server</text>
+  <text x="280" y="280" text-anchor="middle" font-size="10" fill="#16a34a">14 tools</text>
+  <text x="280" y="294" text-anchor="middle" font-size="10" fill="#16a34a">JSON-RPC stdio</text>
+
+  <line x1="350" y1="275" x2="390" y2="275" stroke="#64748b" stroke-width="1.5" marker-end="url(#a)"/>
+  <text x="370" y="268" text-anchor="middle" font-size="9" fill="#64748b">HTTPS</text>
+
+  <rect x="390" y="240" width="140" height="70" rx="8" fill="#fdf4ff" stroke="#a855f7" stroke-width="1.5"/>
+  <text x="460" y="264" text-anchor="middle" font-size="11" font-weight="700" fill="#7e22ce">BioMate API</text>
+  <text x="460" y="280" text-anchor="middle" font-size="10" fill="#9333ea">search · execute</text>
+  <text x="460" y="294" text-anchor="middle" font-size="10" fill="#9333ea">preview · report</text>
+
+  <line x1="530" y1="275" x2="570" y2="275" stroke="#64748b" stroke-width="1.5" marker-end="url(#a)"/>
+
+  <rect x="570" y="240" width="140" height="70" rx="8" fill="#fff7ed" stroke="#f97316" stroke-width="1.5"/>
+  <text x="640" y="264" text-anchor="middle" font-size="11" font-weight="700" fill="#c2410c">AWS Batch</text>
+  <text x="640" y="280" text-anchor="middle" font-size="10" fill="#ea580c">pipeline runs</text>
+  <text x="640" y="294" text-anchor="middle" font-size="10" fill="#ea580c">streams events</text>
+
+  <!-- streaming back arrow -->
+  <path d="M 640 310 L 640 340 L 100 340 L 100 310" stroke="#3b82f6" stroke-width="1.5" fill="none" stroke-dasharray="5,3" marker-end="url(#a)"/>
+  <text x="370" y="358" text-anchor="middle" font-size="10" fill="#1d4ed8">live progress events (notifications/progress) → rendered inline in your AI assistant</text>
+
+  <!-- ── Query databases row ── -->
+  <rect x="30" y="390" width="840" height="100" rx="10" fill="#f0fdf4" stroke="#86efac" stroke-width="1.5"/>
+  <text x="430" y="412" text-anchor="middle" font-size="11" font-weight="600" fill="#15803d">Biological Databases  (query_database tool)</text>
+
+  <rect x="50"  y="422" width="80" height="30" rx="5" fill="#dcfce7" stroke="#86efac"/>
+  <text x="90"  y="441" text-anchor="middle" font-size="9" fill="#15803d">UniProt / PDB</text>
+
+  <rect x="140" y="422" width="80" height="30" rx="5" fill="#dcfce7" stroke="#86efac"/>
+  <text x="180" y="441" text-anchor="middle" font-size="9" fill="#15803d">NCBI Gene</text>
+
+  <rect x="230" y="422" width="80" height="30" rx="5" fill="#dcfce7" stroke="#86efac"/>
+  <text x="270" y="441" text-anchor="middle" font-size="9" fill="#15803d">ClinVar / gnomAD</text>
+
+  <rect x="320" y="422" width="80" height="30" rx="5" fill="#dcfce7" stroke="#86efac"/>
+  <text x="360" y="441" text-anchor="middle" font-size="9" fill="#15803d">KEGG / Reactome</text>
+
+  <rect x="410" y="422" width="80" height="30" rx="5" fill="#dcfce7" stroke="#86efac"/>
+  <text x="450" y="441" text-anchor="middle" font-size="9" fill="#15803d">ChEMBL / ChEBI</text>
+
+  <rect x="500" y="422" width="80" height="30" rx="5" fill="#dcfce7" stroke="#86efac"/>
+  <text x="540" y="441" text-anchor="middle" font-size="9" fill="#15803d">AlphaFold</text>
+
+  <rect x="590" y="422" width="80" height="30" rx="5" fill="#dcfce7" stroke="#86efac"/>
+  <text x="630" y="441" text-anchor="middle" font-size="9" fill="#15803d">HPO / STRING</text>
+
+  <rect x="680" y="422" width="80" height="30" rx="5" fill="#dcfce7" stroke="#86efac"/>
+  <text x="720" y="441" text-anchor="middle" font-size="9" fill="#15803d">PubMed</text>
+
+  <text x="430" y="478" text-anchor="middle" font-size="10" fill="#15803d">All accessible from any connected AI surface with a single tool call</text>
+
+  <!-- Arrow marker -->
+  <defs>
+    <marker id="a" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#64748b"/>
+    </marker>
+  </defs>
+</svg>

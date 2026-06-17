@@ -1,0 +1,130 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 620" font-family="system-ui,-apple-system,sans-serif">
+  <!-- Background -->
+  <rect width="900" height="620" fill="#f8fafc"/>
+
+  <!-- Title -->
+  <text x="450" y="36" text-anchor="middle" font-size="18" font-weight="600" fill="#0f172a">BioMate Connector — Architecture</text>
+
+  <!-- ═══ AI CLIENTS (top) ═══ -->
+  <rect x="30" y="60" width="840" height="90" rx="10" fill="#eff6ff" stroke="#3b82f6" stroke-width="1.5"/>
+  <text x="450" y="80" text-anchor="middle" font-size="12" font-weight="600" fill="#1d4ed8">AI Clients</text>
+
+  <!-- Client boxes -->
+  <rect x="55"  y="90" width="110" height="44" rx="6" fill="#dbeafe" stroke="#93c5fd" stroke-width="1"/>
+  <text x="110" y="107" text-anchor="middle" font-size="11" font-weight="600" fill="#1e40af">Claude</text>
+  <text x="110" y="122" text-anchor="middle" font-size="10" fill="#3b82f6">Desktop / Code</text>
+
+  <rect x="185" y="90" width="110" height="44" rx="6" fill="#dbeafe" stroke="#93c5fd" stroke-width="1"/>
+  <text x="240" y="107" text-anchor="middle" font-size="11" font-weight="600" fill="#1e40af">Cursor</text>
+  <text x="240" y="122" text-anchor="middle" font-size="10" fill="#3b82f6">IDE</text>
+
+  <rect x="315" y="90" width="110" height="44" rx="6" fill="#dbeafe" stroke="#93c5fd" stroke-width="1"/>
+  <text x="370" y="107" text-anchor="middle" font-size="11" font-weight="600" fill="#1e40af">ChatGPT</text>
+  <text x="370" y="122" text-anchor="middle" font-size="10" fill="#3b82f6">Custom GPT</text>
+
+  <rect x="445" y="90" width="110" height="44" rx="6" fill="#dbeafe" stroke="#93c5fd" stroke-width="1"/>
+  <text x="500" y="107" text-anchor="middle" font-size="11" font-weight="600" fill="#1e40af">Slack</text>
+  <text x="500" y="122" text-anchor="middle" font-size="10" fill="#3b82f6">Bot</text>
+
+  <rect x="575" y="90" width="110" height="44" rx="6" fill="#dbeafe" stroke="#93c5fd" stroke-width="1"/>
+  <text x="630" y="107" text-anchor="middle" font-size="11" font-weight="600" fill="#1e40af">WeChat</text>
+  <text x="630" y="122" text-anchor="middle" font-size="10" fill="#3b82f6">Work</text>
+
+  <rect x="705" y="90" width="110" height="44" rx="6" fill="#dbeafe" stroke="#93c5fd" stroke-width="1"/>
+  <text x="760" y="107" text-anchor="middle" font-size="11" font-weight="600" fill="#1e40af">Codex CLI</text>
+  <text x="760" y="122" text-anchor="middle" font-size="10" fill="#3b82f6">/ Coze</text>
+
+  <!-- Arrows down to MCP layer -->
+  <line x1="450" y1="150" x2="450" y2="190" stroke="#6b7280" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arr)"/>
+  <text x="460" y="175" font-size="10" fill="#6b7280">JSON-RPC 2.0 / REST</text>
+
+  <!-- ═══ MCP SERVER (middle) ═══ -->
+  <rect x="200" y="192" width="500" height="80" rx="10" fill="#f0fdf4" stroke="#22c55e" stroke-width="1.5"/>
+  <text x="450" y="212" text-anchor="middle" font-size="12" font-weight="600" fill="#15803d">MCP Server  (mcp/biomate_mcp_server.py)</text>
+  <text x="450" y="231" text-anchor="middle" font-size="10" fill="#16a34a">14 tools  ·  JSON-RPC 2.0 over stdio  ·  streaming via notifications/progress</text>
+  <text x="320" y="258" text-anchor="middle" font-size="10" fill="#15803d">biomate_session · search_workflow · run_workflow · get_run · cancel_run · list_runs</text>
+  <text x="590" y="258" text-anchor="middle" font-size="10" fill="#15803d">preview_file · export_report · analyze_results · explain_error · query_database · recall_memory</text>
+
+  <!-- Arrow down to BioMate API -->
+  <line x1="450" y1="272" x2="450" y2="312" stroke="#6b7280" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="460" y="296" font-size="10" fill="#6b7280">HTTPS  (BIOMATE_API_URL)</text>
+
+  <!-- ═══ BIOMATE API ═══ -->
+  <rect x="160" y="315" width="580" height="70" rx="10" fill="#fdf4ff" stroke="#a855f7" stroke-width="1.5"/>
+  <text x="450" y="337" text-anchor="middle" font-size="12" font-weight="600" fill="#7e22ce">BioMate API  (api.biomate.ai)</text>
+  <text x="450" y="357" text-anchor="middle" font-size="10" fill="#9333ea">Workflow search · Run execution · File preview · Biological DB queries · Memory · Reporting</text>
+  <text x="450" y="374" text-anchor="middle" font-size="10" fill="#9333ea">2,455 Nextflow workflows across 34 biological domains</text>
+
+  <!-- Arrow down to AWS -->
+  <line x1="450" y1="385" x2="450" y2="415" stroke="#6b7280" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- ═══ AWS BATCH ═══ -->
+  <rect x="280" y="417" width="340" height="44" rx="10" fill="#fff7ed" stroke="#f97316" stroke-width="1.5"/>
+  <text x="450" y="437" text-anchor="middle" font-size="11" font-weight="600" fill="#c2410c">AWS Batch  —  workflow execution</text>
+  <text x="450" y="453" text-anchor="middle" font-size="10" fill="#ea580c">RNA-seq · WGS · CryoEM · ADMET · PBPK · docking · proteomics …</text>
+
+  <!-- ═══ LAB INSTRUMENTS (bottom left) ═══ -->
+  <rect x="30" y="490" width="380" height="110" rx="10" fill="#fef9c3" stroke="#eab308" stroke-width="1.5"/>
+  <text x="220" y="510" text-anchor="middle" font-size="12" font-weight="600" fill="#854d0e">Lab Instruments  (lab_instruments/)</text>
+
+  <rect x="45"  y="520" width="80" height="34" rx="5" fill="#fef08a" stroke="#ca8a04" stroke-width="1"/>
+  <text x="85"  y="534" text-anchor="middle" font-size="9" font-weight="600" fill="#713f12">Illumina</text>
+  <text x="85"  y="546" text-anchor="middle" font-size="9" fill="#854d0e">BaseSpace</text>
+
+  <rect x="135" y="520" width="80" height="34" rx="5" fill="#fef08a" stroke="#ca8a04" stroke-width="1"/>
+  <text x="175" y="534" text-anchor="middle" font-size="9" font-weight="600" fill="#713f12">Nanopore</text>
+  <text x="175" y="546" text-anchor="middle" font-size="9" fill="#854d0e">MinKNOW</text>
+
+  <rect x="225" y="520" width="80" height="34" rx="5" fill="#fef08a" stroke="#ca8a04" stroke-width="1"/>
+  <text x="265" y="534" text-anchor="middle" font-size="9" font-weight="600" fill="#713f12">CryoEM</text>
+  <text x="265" y="546" text-anchor="middle" font-size="9" fill="#854d0e">EPU</text>
+
+  <rect x="315" y="520" width="80" height="34" rx="5" fill="#fef08a" stroke="#ca8a04" stroke-width="1"/>
+  <text x="355" y="534" text-anchor="middle" font-size="9" font-weight="600" fill="#713f12">LC-MS</text>
+  <text x="355" y="546" text-anchor="middle" font-size="9" fill="#854d0e">Thermo/Bruker</text>
+
+  <rect x="45"  y="561" width="80" height="34" rx="5" fill="#fef08a" stroke="#ca8a04" stroke-width="1"/>
+  <text x="85"  y="575" text-anchor="middle" font-size="9" font-weight="600" fill="#713f12">Flow Cyto</text>
+  <text x="85"  y="587" text-anchor="middle" font-size="9" fill="#854d0e">FCS files</text>
+
+  <rect x="135" y="561" width="80" height="34" rx="5" fill="#fef08a" stroke="#ca8a04" stroke-width="1"/>
+  <text x="175" y="575" text-anchor="middle" font-size="9" font-weight="600" fill="#713f12">qPCR</text>
+  <text x="175" y="587" text-anchor="middle" font-size="9" fill="#854d0e">QuantStudio</text>
+
+  <rect x="225" y="561" width="80" height="34" rx="5" fill="#fef08a" stroke="#ca8a04" stroke-width="1"/>
+  <text x="265" y="575" text-anchor="middle" font-size="9" font-weight="600" fill="#713f12">Opentrons</text>
+  <text x="265" y="587" text-anchor="middle" font-size="9" fill="#854d0e">OT-2 / Flex</text>
+
+  <rect x="315" y="561" width="80" height="34" rx="5" fill="#fef08a" stroke="#ca8a04" stroke-width="1"/>
+  <text x="355" y="575" text-anchor="middle" font-size="9" font-weight="600" fill="#713f12">Benchling</text>
+  <text x="355" y="587" text-anchor="middle" font-size="9" fill="#854d0e">ELN + SiLA2</text>
+
+  <!-- Arrow from instruments up to BioMate API -->
+  <path d="M 220 490 L 220 460 L 380 460 L 380 385" stroke="#eab308" stroke-width="1.5" fill="none" stroke-dasharray="5,3" marker-end="url(#arr2)"/>
+  <text x="310" y="456" font-size="10" fill="#854d0e">auto-submit run</text>
+
+  <!-- ═══ OAUTH (bottom right) ═══ -->
+  <rect x="490" y="490" width="380" height="110" rx="10" fill="#fdf2f8" stroke="#ec4899" stroke-width="1.5"/>
+  <text x="680" y="510" text-anchor="middle" font-size="12" font-weight="600" fill="#9d174d">OAuth 2.1 + PKCE  (oauth-server/)</text>
+  <text x="680" y="530" text-anchor="middle" font-size="10" fill="#be185d">Public client model — no shared secrets</text>
+  <text x="680" y="548" text-anchor="middle" font-size="10" fill="#be185d">Per-surface scopes, individually revocable</text>
+  <text x="680" y="566" text-anchor="middle" font-size="10" fill="#be185d">Refresh tokens hashed (HMAC-SHA256), rotated on use</text>
+  <text x="680" y="584" text-anchor="middle" font-size="10" fill="#be185d">30-min JWT access tokens · Self-hostable</text>
+
+  <!-- Arrow from OAuth to API -->
+  <line x1="680" y1="490" x2="620" y2="385" stroke="#ec4899" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arr3)"/>
+  <text x="665" y="445" font-size="10" fill="#9d174d">Bearer JWT</text>
+
+  <!-- Arrowhead markers -->
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#6b7280"/>
+    </marker>
+    <marker id="arr2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#eab308"/>
+    </marker>
+    <marker id="arr3" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#ec4899"/>
+    </marker>
+  </defs>
+</svg>

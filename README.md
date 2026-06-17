@@ -1,6 +1,6 @@
 # BioMate Connector
 
-Connect BioMate to the AI tools you already use — Claude Code, Claude Desktop, Cursor, Codex, ChatGPT, Slack, and WeChat — and run real bioinformatics pipelines without leaving your chat window.
+Connect BioMate to the AI tools you already use — Claude Code, Claude Desktop, Cursor, Codex, ChatGPT, Slack, and WeChat — and run real bioinformatics pipelines without leaving your chat window. Also connect your lab instruments (Illumina, Nanopore, CryoEM, LC-MS, and more) so data flows automatically into the right pipeline the moment a run finishes.
 
 ```
 > Screen aspirin and caffeine for hERG inhibition and CYP3A4 metabolism.
@@ -9,6 +9,14 @@ Connect BioMate to the AI tools you already use — Claude Code, Claude Desktop,
 ```
 
 BioMate finds the right pipeline from 2,455 indexed workflows, fills the parameters, launches on AWS Batch, and streams live progress back to your assistant. No copy-pasting commands. No waiting for a dashboard to refresh.
+
+## Architecture
+
+![Architecture](docs/figures/architecture.svg)
+
+## Information Flow
+
+![Data Flow](docs/figures/data_flow.svg)
 
 ---
 
@@ -36,10 +44,37 @@ Pick your surface, authenticate once via your browser, and you're done. The CLI 
 
 ```
 connectors/        Per-surface install guides, MCP config snippets, and the @biomate/connect CLI
+lab_instruments/   Lab instrument connectors (Illumina, Nanopore, CryoEM, LC-MS, and 6 more)
 oauth-server/      OAuth 2.1 + PKCE authorization server (self-hostable)
 mcp/               Shared MCP tools manifest and server — the single source of truth for all surfaces
 skills/biomate/    Claude Skill bundle for the Anthropic Skills gallery
-tests/             Connector test suites (offline sandbox + live API)
+tests/             Connector test suites (offline sandbox + live API + 68 lab instrument checks)
+```
+
+---
+
+## Lab Instrument Connectors
+
+Connect physical instruments so raw data is routed automatically to the right BioMate workflow the moment a run finishes — no manual upload, no copy-pasting paths.
+
+| Instrument | File | Trigger |
+|-----------|------|---------|
+| **Illumina BaseSpace** | `lab_instruments/illumina_basespace_connector.py` | New run via BaseSpace API |
+| **Oxford Nanopore MinKNOW** | `lab_instruments/nanopore_minknow_connector.py` | Run complete via MinKNOW HTTP API |
+| **CryoEM EPU** | `lab_instruments/cryoem_instrument_connector.py` | New `.mrc`/`.mrcs` micrographs in output dir |
+| **LC-MS** | `lab_instruments/lcms_connector.py` | New `.raw`/`.d`/`.wiff` files (Thermo, Bruker, Waters, SCIEX) |
+| **Flow Cytometer** | `lab_instruments/flow_cytometer_connector.py` | New `.fcs` files (BD, Beckman, Sony) |
+| **qPCR** | `lab_instruments/qpcr_connector.py` | New `.eds` (QuantStudio) or `.pcrd` (Bio-Rad CFX) |
+| **Plate Reader** | `lab_instruments/plate_reader_connector.py` | New `.xlsx` exports (BioTek, Molecular Devices) |
+| **Opentrons OT-2/Flex** | `lab_instruments/opentrons_connector.py` | Protocol complete via robot HTTP API |
+| **Benchling ELN** | `lab_instruments/benchling_connector.py` | New entry or assay result via Benchling API |
+| **SiLA2 devices** | `lab_instruments/sila2_adapter.py` | gRPC events (Hamilton, Sartorius, etc.) |
+
+Quick start — copy `config.example.yaml` (in `lab_instruments/`), fill in your instrument details, and run:
+
+```bash
+pip install -r requirements.txt
+python3 lab_instruments/instrument_watcher.py --config config.yaml
 ```
 
 ---

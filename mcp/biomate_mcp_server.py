@@ -267,9 +267,9 @@ class BioMateClient:
 
     def recall_memory(self, query: str, scope: str = "all", limit: int = 5) -> Dict[str, Any]:
         try:
-            r = self.session.post(
+            r = self.session.get(
                 self._url("/api/memory/relevant"),
-                json={"query": query, "scope": scope, "limit": limit},
+                params={"query": query, "scope": scope, "limit": limit},
                 timeout=20,
             )
             r.raise_for_status()

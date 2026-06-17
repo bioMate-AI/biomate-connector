@@ -325,7 +325,7 @@ TOOL_SCHEMAS: List[ToolSchema] = [
         description=(
             "Query a biological/chemical database by accession or name. Supported: "
             "uniprot, pdb, alphafold, ncbi_gene, dbsnp, clinvar, gnomad, kegg, reactome, "
-            "chebi, pubchem, hpo, omim, string."
+            "chebi, chembl, hpo, string, pubmed."
         ),
         input_schema={
             "type": "object",
@@ -336,9 +336,8 @@ TOOL_SCHEMAS: List[ToolSchema] = [
                         "uniprot", "pdb", "alphafold", "ncbi_gene",
                         "dbsnp", "clinvar", "gnomad",
                         "kegg", "reactome",
-                        "chebi", "pubchem",
-                        "hpo", "omim",
-                        "string",
+                        "chebi", "chembl",
+                        "hpo", "string", "pubmed",
                     ],
                 },
                 "query": {"type": "string", "description": "Accession, gene symbol, or compound name."},

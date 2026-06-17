@@ -1,0 +1,7 @@
+# BioMate Lab Connectors — Python dependencies
+# Install: pip install -r requirements.txt
+
+requests>=2.28.0        # HTTP client (all connectors)
+PyYAML>=6.0             # config.yaml parsing
+watchdog>=3.0.0         # CryoEM EPU file watching (optional but recommended)
+openpyxl>=3.1.0         # Plate reader .xlsx parsing
