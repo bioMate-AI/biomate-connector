@@ -10,44 +10,48 @@
   <text x="450" y="80" text-anchor="middle" font-size="12" font-weight="600" fill="#1d4ed8">AI Clients</text>
 
   <!-- Client boxes -->
-  <rect x="55"  y="90" width="110" height="44" rx="6" fill="#dbeafe" stroke="#93c5fd" stroke-width="1"/>
-  <text x="110" y="107" text-anchor="middle" font-size="11" font-weight="600" fill="#1e40af">Claude</text>
-  <text x="110" y="122" text-anchor="middle" font-size="10" fill="#3b82f6">Desktop / Code</text>
+  <rect x="55"  y="90" width="100" height="44" rx="6" fill="#dbeafe" stroke="#93c5fd" stroke-width="1"/>
+  <text x="105" y="107" text-anchor="middle" font-size="11" font-weight="600" fill="#1e40af">Claude</text>
+  <text x="105" y="122" text-anchor="middle" font-size="10" fill="#3b82f6">Desktop / Code</text>
 
-  <rect x="185" y="90" width="110" height="44" rx="6" fill="#dbeafe" stroke="#93c5fd" stroke-width="1"/>
-  <text x="240" y="107" text-anchor="middle" font-size="11" font-weight="600" fill="#1e40af">Cursor</text>
-  <text x="240" y="122" text-anchor="middle" font-size="10" fill="#3b82f6">IDE</text>
+  <rect x="167" y="90" width="100" height="44" rx="6" fill="#dbeafe" stroke="#93c5fd" stroke-width="1"/>
+  <text x="217" y="107" text-anchor="middle" font-size="11" font-weight="600" fill="#1e40af">Cursor</text>
+  <text x="217" y="122" text-anchor="middle" font-size="10" fill="#3b82f6">IDE</text>
 
-  <rect x="315" y="90" width="110" height="44" rx="6" fill="#dbeafe" stroke="#93c5fd" stroke-width="1"/>
-  <text x="370" y="107" text-anchor="middle" font-size="11" font-weight="600" fill="#1e40af">ChatGPT</text>
-  <text x="370" y="122" text-anchor="middle" font-size="10" fill="#3b82f6">Custom GPT</text>
+  <rect x="279" y="90" width="100" height="44" rx="6" fill="#dbeafe" stroke="#93c5fd" stroke-width="1"/>
+  <text x="329" y="107" text-anchor="middle" font-size="11" font-weight="600" fill="#1e40af">ChatGPT</text>
+  <text x="329" y="122" text-anchor="middle" font-size="10" fill="#3b82f6">Custom GPT</text>
 
-  <rect x="445" y="90" width="110" height="44" rx="6" fill="#dbeafe" stroke="#93c5fd" stroke-width="1"/>
-  <text x="500" y="107" text-anchor="middle" font-size="11" font-weight="600" fill="#1e40af">Slack</text>
-  <text x="500" y="122" text-anchor="middle" font-size="10" fill="#3b82f6">Bot</text>
+  <rect x="391" y="90" width="100" height="44" rx="6" fill="#dbeafe" stroke="#93c5fd" stroke-width="1"/>
+  <text x="441" y="107" text-anchor="middle" font-size="11" font-weight="600" fill="#1e40af">Slack</text>
+  <text x="441" y="122" text-anchor="middle" font-size="10" fill="#3b82f6">Bot</text>
 
-  <rect x="575" y="90" width="110" height="44" rx="6" fill="#dbeafe" stroke="#93c5fd" stroke-width="1"/>
-  <text x="630" y="107" text-anchor="middle" font-size="11" font-weight="600" fill="#1e40af">WeChat</text>
-  <text x="630" y="122" text-anchor="middle" font-size="10" fill="#3b82f6">Work</text>
+  <rect x="503" y="90" width="100" height="44" rx="6" fill="#dbeafe" stroke="#93c5fd" stroke-width="1"/>
+  <text x="553" y="107" text-anchor="middle" font-size="11" font-weight="600" fill="#1e40af">WeChat</text>
+  <text x="553" y="122" text-anchor="middle" font-size="10" fill="#3b82f6">Work</text>
 
-  <rect x="705" y="90" width="110" height="44" rx="6" fill="#dbeafe" stroke="#93c5fd" stroke-width="1"/>
-  <text x="760" y="107" text-anchor="middle" font-size="11" font-weight="600" fill="#1e40af">Codex CLI</text>
-  <text x="760" y="122" text-anchor="middle" font-size="10" fill="#3b82f6">/ Coze</text>
+  <rect x="615" y="90" width="100" height="44" rx="6" fill="#dbeafe" stroke="#93c5fd" stroke-width="1"/>
+  <text x="665" y="107" text-anchor="middle" font-size="11" font-weight="600" fill="#1e40af">Codex CLI</text>
+  <text x="665" y="122" text-anchor="middle" font-size="10" fill="#3b82f6">/ Coze</text>
+
+  <!-- "..." indicator -->
+  <text x="745" y="116" text-anchor="middle" font-size="16" font-weight="600" fill="#93c5fd">···</text>
 
   <!-- Arrows down to MCP layer -->
   <line x1="450" y1="150" x2="450" y2="190" stroke="#6b7280" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arr)"/>
   <text x="460" y="175" font-size="10" fill="#6b7280">JSON-RPC 2.0 / REST</text>
 
   <!-- ═══ MCP SERVER (middle) ═══ -->
-  <rect x="200" y="192" width="500" height="80" rx="10" fill="#f0fdf4" stroke="#22c55e" stroke-width="1.5"/>
-  <text x="450" y="212" text-anchor="middle" font-size="12" font-weight="600" fill="#15803d">MCP Server  (mcp/biomate_mcp_server.py)</text>
+  <rect x="200" y="192" width="500" height="100" rx="10" fill="#f0fdf4" stroke="#22c55e" stroke-width="1.5"/>
+  <text x="450" y="213" text-anchor="middle" font-size="12" font-weight="600" fill="#15803d">MCP Server  (mcp/biomate_mcp_server.py)</text>
   <text x="450" y="231" text-anchor="middle" font-size="10" fill="#16a34a">14 tools  ·  JSON-RPC 2.0 over stdio  ·  streaming via notifications/progress</text>
-  <text x="320" y="258" text-anchor="middle" font-size="10" fill="#15803d">biomate_session · search_workflow · run_workflow · get_run · cancel_run · list_runs</text>
-  <text x="590" y="258" text-anchor="middle" font-size="10" fill="#15803d">preview_file · export_report · analyze_results · explain_error · query_database · recall_memory</text>
+  <line x1="220" y1="240" x2="680" y2="240" stroke="#86efac" stroke-width="0.8"/>
+  <text x="450" y="256" text-anchor="middle" font-size="9" fill="#15803d">biomate_session · search_workflow · run_workflow · get_run · cancel_run · list_runs</text>
+  <text x="450" y="273" text-anchor="middle" font-size="9" fill="#15803d">preview_file · export_report · analyze_results · explain_error · query_database · recall_memory</text>
 
   <!-- Arrow down to BioMate API -->
-  <line x1="450" y1="272" x2="450" y2="312" stroke="#6b7280" stroke-width="1.5" marker-end="url(#arr)"/>
-  <text x="460" y="296" font-size="10" fill="#6b7280">HTTPS  (BIOMATE_API_URL)</text>
+  <line x1="450" y1="292" x2="450" y2="312" stroke="#6b7280" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="460" y="306" font-size="10" fill="#6b7280">HTTPS  (BIOMATE_API_URL)</text>
 
   <!-- ═══ BIOMATE API ═══ -->
   <rect x="160" y="315" width="580" height="70" rx="10" fill="#fdf4ff" stroke="#a855f7" stroke-width="1.5"/>
@@ -55,10 +59,10 @@
   <text x="450" y="357" text-anchor="middle" font-size="10" fill="#9333ea">Workflow search · Run execution · File preview · Biological DB queries · Memory · Reporting</text>
   <text x="450" y="374" text-anchor="middle" font-size="10" fill="#9333ea">2,455 pipeline workflows across 34 biological domains</text>
 
-  <!-- Arrow down to AWS -->
+  <!-- Arrow down to cloud -->
   <line x1="450" y1="385" x2="450" y2="415" stroke="#6b7280" stroke-width="1.5" marker-end="url(#arr)"/>
 
-  <!-- ═══ AWS BATCH ═══ -->
+  <!-- ═══ BIOMATE CLOUD ═══ -->
   <rect x="280" y="417" width="340" height="44" rx="10" fill="#fff7ed" stroke="#f97316" stroke-width="1.5"/>
   <text x="450" y="437" text-anchor="middle" font-size="11" font-weight="600" fill="#c2410c">BioMate cloud  —  workflow execution</text>
   <text x="450" y="453" text-anchor="middle" font-size="10" fill="#ea580c">RNA-seq · WGS · CryoEM · ADMET · PBPK · docking · proteomics …</text>

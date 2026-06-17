@@ -55,9 +55,9 @@
 
   <!-- MCP flow row -->
   <rect x="30" y="240" width="140" height="70" rx="8" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.5"/>
-  <text x="100" y="264" text-anchor="middle" font-size="11" font-weight="700" fill="#1e40af">AI Assistant</text>
-  <text x="100" y="280" text-anchor="middle" font-size="10" fill="#1d4ed8">Claude / Cursor</text>
-  <text x="100" y="294" text-anchor="middle" font-size="10" fill="#1d4ed8">Slack / ChatGPT</text>
+  <text x="100" y="262" text-anchor="middle" font-size="11" font-weight="700" fill="#1e40af">AI Assistant</text>
+  <text x="100" y="278" text-anchor="middle" font-size="10" fill="#1d4ed8">Claude / Cursor</text>
+  <text x="100" y="294" text-anchor="middle" font-size="10" fill="#1d4ed8">Slack / ChatGPT / ···</text>
 
   <line x1="170" y1="275" x2="210" y2="275" stroke="#64748b" stroke-width="1.5" marker-end="url(#a)"/>
   <text x="190" y="268" text-anchor="middle" font-size="9" fill="#64748b">tools/call</text>
@@ -87,34 +87,37 @@
   <text x="370" y="358" text-anchor="middle" font-size="10" fill="#1d4ed8">live progress events (notifications/progress) → rendered inline in your AI assistant</text>
 
   <!-- ── Query databases row ── -->
-  <rect x="30" y="390" width="840" height="100" rx="10" fill="#f0fdf4" stroke="#86efac" stroke-width="1.5"/>
-  <text x="430" y="412" text-anchor="middle" font-size="11" font-weight="600" fill="#15803d">Biological Databases  (query_database tool)</text>
+  <rect x="30" y="385" width="800" height="105" rx="10" fill="#f0fdf4" stroke="#86efac" stroke-width="1.5"/>
+  <text x="430" y="406" text-anchor="middle" font-size="11" font-weight="600" fill="#15803d">Biological Databases  (query_database tool)</text>
 
-  <rect x="50"  y="422" width="80" height="30" rx="5" fill="#dcfce7" stroke="#86efac"/>
-  <text x="90"  y="441" text-anchor="middle" font-size="9" fill="#15803d">UniProt / PDB</text>
+  <rect x="48"  y="416" width="80" height="30" rx="5" fill="#dcfce7" stroke="#86efac"/>
+  <text x="88"  y="435" text-anchor="middle" font-size="9" fill="#15803d">UniProt / PDB</text>
 
-  <rect x="140" y="422" width="80" height="30" rx="5" fill="#dcfce7" stroke="#86efac"/>
-  <text x="180" y="441" text-anchor="middle" font-size="9" fill="#15803d">NCBI Gene</text>
+  <rect x="136" y="416" width="80" height="30" rx="5" fill="#dcfce7" stroke="#86efac"/>
+  <text x="176" y="435" text-anchor="middle" font-size="9" fill="#15803d">NCBI Gene</text>
 
-  <rect x="230" y="422" width="80" height="30" rx="5" fill="#dcfce7" stroke="#86efac"/>
-  <text x="270" y="441" text-anchor="middle" font-size="9" fill="#15803d">ClinVar / gnomAD</text>
+  <rect x="224" y="416" width="84" height="30" rx="5" fill="#dcfce7" stroke="#86efac"/>
+  <text x="266" y="435" text-anchor="middle" font-size="9" fill="#15803d">ClinVar / gnomAD</text>
 
-  <rect x="320" y="422" width="80" height="30" rx="5" fill="#dcfce7" stroke="#86efac"/>
-  <text x="360" y="441" text-anchor="middle" font-size="9" fill="#15803d">KEGG / Reactome</text>
+  <rect x="316" y="416" width="88" height="30" rx="5" fill="#dcfce7" stroke="#86efac"/>
+  <text x="360" y="435" text-anchor="middle" font-size="9" fill="#15803d">KEGG / Reactome</text>
 
-  <rect x="410" y="422" width="80" height="30" rx="5" fill="#dcfce7" stroke="#86efac"/>
-  <text x="450" y="441" text-anchor="middle" font-size="9" fill="#15803d">ChEMBL / ChEBI</text>
+  <rect x="412" y="416" width="84" height="30" rx="5" fill="#dcfce7" stroke="#86efac"/>
+  <text x="454" y="435" text-anchor="middle" font-size="9" fill="#15803d">ChEMBL / ChEBI</text>
 
-  <rect x="500" y="422" width="80" height="30" rx="5" fill="#dcfce7" stroke="#86efac"/>
-  <text x="540" y="441" text-anchor="middle" font-size="9" fill="#15803d">AlphaFold</text>
+  <rect x="504" y="416" width="76" height="30" rx="5" fill="#dcfce7" stroke="#86efac"/>
+  <text x="542" y="435" text-anchor="middle" font-size="9" fill="#15803d">AlphaFold</text>
 
-  <rect x="590" y="422" width="80" height="30" rx="5" fill="#dcfce7" stroke="#86efac"/>
-  <text x="630" y="441" text-anchor="middle" font-size="9" fill="#15803d">HPO / STRING</text>
+  <rect x="588" y="416" width="80" height="30" rx="5" fill="#dcfce7" stroke="#86efac"/>
+  <text x="628" y="435" text-anchor="middle" font-size="9" fill="#15803d">HPO / STRING</text>
 
-  <rect x="680" y="422" width="80" height="30" rx="5" fill="#dcfce7" stroke="#86efac"/>
-  <text x="720" y="441" text-anchor="middle" font-size="9" fill="#15803d">PubMed</text>
+  <rect x="676" y="416" width="66" height="30" rx="5" fill="#dcfce7" stroke="#86efac"/>
+  <text x="709" y="435" text-anchor="middle" font-size="9" fill="#15803d">PubMed</text>
 
-  <text x="430" y="478" text-anchor="middle" font-size="10" fill="#15803d">All accessible from any connected AI surface with a single tool call</text>
+  <!-- "..." indicator for more databases -->
+  <text x="760" y="435" text-anchor="middle" font-size="13" font-weight="600" fill="#86efac">···</text>
+
+  <text x="415" y="472" text-anchor="middle" font-size="10" fill="#15803d">All accessible from any connected AI surface with a single tool call</text>
 
   <!-- Arrow marker -->
   <defs>
