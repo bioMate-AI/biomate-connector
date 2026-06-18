@@ -1,6 +1,6 @@
 # BioMate Connector
 
-Connect BioMate to the AI tools you already use — Claude Code, Claude Desktop, Cursor, Codex, ChatGPT, Slack, and WeChat — and run real bioinformatics pipelines without leaving your chat window. Also connect your lab instruments (Illumina, Nanopore, CryoEM, LC-MS, and more) so data flows automatically into the right pipeline the moment a run finishes.
+Connect BioMate to the AI tools you already use — Claude Code, Claude Desktop, Cursor, Codex, ChatGPT, Slack, WeChat, Telegram, and Feishu/Lark — and run real bioinformatics pipelines without leaving your chat window. Also connect your lab instruments (Illumina, Nanopore, CryoEM, LC-MS, and more) so data flows automatically into the right pipeline the moment a run finishes.
 
 ```
 > Screen aspirin and caffeine for hERG inhibition and CYP3A4 metabolism.
@@ -37,6 +37,8 @@ Pick your surface, authenticate once via your browser, and you're done. The CLI 
 | ChatGPT | See [`connectors/chatgpt/INSTALL.md`](connectors/chatgpt/INSTALL.md) |
 | Slack | See [`connectors/slack/README.md`](connectors/slack/README.md) |
 | WeChat / Open Claw | `npx @biomate/connect open-claw` |
+| Telegram | See [`connectors/telegram/README.md`](connectors/telegram/README.md) |
+| Feishu / Lark | See [`connectors/feishu/README.md`](connectors/feishu/README.md) |
 
 ---
 

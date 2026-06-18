@@ -11,6 +11,8 @@
 | [ChatGPT](./chatgpt/) | [Custom GPT setup →](./chatgpt/INSTALL.md) | ✓ |
 | [Open Claw / WeChat](./open-claw/) | `npx @biomate/connect open-claw` | ✓ |
 | [Slack](./slack/) | [Add to Slack →](https://biomate.ai/connectors/slack/install) | Pilot (public ~2 weeks post-launch) |
+| [Telegram](./telegram/) | [BotFather setup →](./telegram/README.md) | ✓ |
+| [Feishu / Lark](./feishu/) | [Open-platform setup →](./feishu/README.md) | ✓ |
 
 ## The 30-second pitch
 
@@ -39,6 +41,8 @@ Each prompt finds the right workflow from 2,455 indexed pipelines, fills require
                        ↓
    ChatGPT Action ──→  api.biomate.ai  ←── Slack bot
                        │                ←── Open Claw (WeChat)
+                       │                ←── Telegram bot
+                       │                ←── Feishu / Lark bot
                        ↓
                 BioMate execution engine
                   │   │   │   │
@@ -95,7 +99,9 @@ connectors/
 ├── chatgpt/           # OpenAPI 3.1 spec + GPT setup
 ├── open-claw/         # WeChat hosted bridge
 ├── wechat/            # WeChat-native branding
-└── slack/             # Slack App bot
+├── slack/             # Slack App bot
+├── telegram/          # Telegram Bot API bot
+└── feishu/            # Feishu / Lark bot
 backend/lib/mcp/                       # Tools manifest (single source of truth)
 oauth-server/   # OAuth 2.1 + PKCE server
 skills/biomate/                        # Claude Skill bundle (catalog + render templates + OAuth)
