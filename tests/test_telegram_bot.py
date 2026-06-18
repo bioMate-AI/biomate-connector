@@ -111,7 +111,7 @@ class TestOpenClawQuery(unittest.TestCase):
             ("done", {}),
         ]
         with MockSSEServer(events=events) as srv:
-            reply, wf_id = _open_claw_query(
+            reply, wf_id, _ = _open_claw_query(
                 "chat1", "Find RNA-seq workflow",
                 api_key=None, _base_url_override=srv.base_url,
             )
@@ -125,7 +125,7 @@ class TestOpenClawQuery(unittest.TestCase):
             ("delta", {"text": "This should not appear."}),
         ]
         with MockSSEServer(events=events) as srv:
-            reply, _ = _open_claw_query("chat2", "Test", _base_url_override=srv.base_url)
+            reply, _, _ = _open_claw_query("chat2", "Test", _base_url_override=srv.base_url)
         self.assertIn("First part", reply)
         self.assertNotIn("should not appear", reply)
 
@@ -136,7 +136,7 @@ class TestOpenClawQuery(unittest.TestCase):
             ("done", {}),
         ]
         with MockSSEServer(events=events) as srv:
-            _, wf_id = _open_claw_query("chat3", "Find RNA-seq", _base_url_override=srv.base_url)
+            _, wf_id, _ = _open_claw_query("chat3", "Find RNA-seq", _base_url_override=srv.base_url)
         self.assertEqual(wf_id, "rnaseq_differential")
 
     def test_history_grows_after_query(self):
@@ -150,7 +150,7 @@ class TestOpenClawQuery(unittest.TestCase):
 
     def test_503_returns_friendly_error(self):
         with MockSSEServer(status=503, events=[]) as srv:
-            reply, wf_id = _open_claw_query("chat6", "Test", _base_url_override=srv.base_url)
+            reply, wf_id, _ = _open_claw_query("chat6", "Test", _base_url_override=srv.base_url)
         self.assertIn("❌", reply)
         self.assertIsNone(wf_id)
 
@@ -161,7 +161,7 @@ class TestOpenClawQuery(unittest.TestCase):
             raise requests.exceptions.Timeout("timed out")
 
         with patch("telegram_bot.requests.post", side_effect=_slow_post):
-            reply, wf_id = _open_claw_query("chat7", "Slow query")
+            reply, wf_id, _ = _open_claw_query("chat7", "Slow query")
         self.assertIn("⏱", reply)
         self.assertIsNone(wf_id)
 
@@ -232,6 +232,7 @@ class TestHandleUpdate(unittest.TestCase):
         self.assertEqual(len(_get_history("100")), 0)
 
     def test_scientific_query_sends_reply_and_card(self):
+        # No server view_url → button falls back to the app root.
         sent = []
         cards = []
         events = [
@@ -247,7 +248,23 @@ class TestHandleUpdate(unittest.TestCase):
 
         self.assertTrue(any("ADMET" in t for t in sent))
         self.assertEqual(len(cards), 1)
-        self.assertEqual(cards[0]["workflow_id"], "predict_admet_properties")
+        self.assertEqual(cards[0]["workflow_name"], "predict_admet_properties")
+        self.assertEqual(cards[0]["url"], telegram_bot.BIOMATE_DEEP_LINK_BASE)
+
+    def test_card_prefers_server_view_url(self):
+        # When the stream supplies a view_url, the button uses it verbatim.
+        cards = []
+        events = [
+            ("workflow_ready", {"workflow_name": "wf", "view_url": "https://app.biomate.ai/w/abc123"}),
+            ("done", {}),
+        ]
+        with MockSSEServer(events=events) as srv:
+            with patch("telegram_bot.BIOMATE_API_URL", srv.base_url), \
+                 patch("telegram_bot.send_message", return_value=True), \
+                 patch("telegram_bot.send_workflow_card", side_effect=lambda cid, **k: cards.append(k) or True):
+                handle_update(self._update("run wf"))
+
+        self.assertEqual(cards[0]["url"], "https://app.biomate.ai/w/abc123")
 
 
 # ─────────────────────────────────────────────────────────────────────────────

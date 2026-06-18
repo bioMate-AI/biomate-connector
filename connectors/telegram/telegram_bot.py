@@ -27,7 +27,6 @@ import os
 import threading
 from collections import deque
 from typing import Any, Deque, Dict, List, Optional, Tuple
-from urllib.parse import quote
 
 import requests
 
@@ -84,22 +83,22 @@ def send_message(chat_id: Any, text: str, disable_web_page_preview: bool = True)
         return False
 
 
-def send_workflow_card(chat_id: Any, workflow_name: str, workflow_id: str) -> bool:
+def send_workflow_card(chat_id: Any, workflow_name: str, url: str) -> bool:
     """
-    Send a follow-up message with the "Run in BioMate" deep link as an inline
-    button. Telegram has no native card type, so we use an inline keyboard.
+    Send a follow-up message with an "Open in BioMate" button linking to `url`
+    (a server-provided view_url, or the app panel). Telegram has no native card
+    type, so we use an inline keyboard.
     """
     if not TELEGRAM_BOT_TOKEN:
         log.warning("TELEGRAM_BOT_TOKEN not set — cannot send workflow card")
         return False
 
-    deep_link = f"{BIOMATE_DEEP_LINK_BASE}?workflow={quote(workflow_id, safe='')}"
     payload = {
         # Plain text (no parse_mode) so workflow names with _, *, (), / render as-is.
         "chat_id": chat_id,
         "text": f"🧬 BioMate workflow: {workflow_name}",
         "reply_markup": {
-            "inline_keyboard": [[{"text": "在 BioMate 中运行 / Run in BioMate", "url": deep_link}]]
+            "inline_keyboard": [[{"text": "打开 BioMate 面板 / Open in BioMate", "url": url}]]
         },
     }
     try:
@@ -179,19 +178,22 @@ def _open_claw_query(
     api_key: Optional[str] = None,
     timeout: int = 55,
     _base_url_override: Optional[str] = None,
-) -> Tuple[str, Optional[str]]:
+) -> Tuple[str, Optional[str], Optional[str]]:
     """
     Send a query through /api/chat/stream (BioMate's main AI endpoint).
-    Returns (reply_text, workflow_id_or_None).
+    Returns (reply_text, workflow_name_or_None, view_url_or_None).
 
     /api/chat/stream emits SSE events:
         event: delta          / data: {"text": "..."}
-        event: workflow_ready / data: {"workflow_name": ..., "workflow_type": ...}
+        event: workflow_ready / data: {"workflow_name": ..., "view_url": ...}
         event: final          / data: {"workflow": {...}, "response": "..."}
         event: done           / data: {}
 
-    We accumulate delta events for the reply and capture the workflow_name
-    from workflow_ready (or final) for the "Run in BioMate" deep-link button.
+    We accumulate delta events for the reply, capture the workflow_name from
+    workflow_ready (or final) for the card title, and capture a server-provided
+    view_url for the button (the caller falls back to the app panel if absent —
+    the chat-generated workflow has no name-addressable URL, so we never build a
+    deep link from the workflow name).
     """
     headers: Dict[str, str] = {"Content-Type": "application/json", "Accept": "text/event-stream"}
     effective_key = api_key or BIOMATE_API_KEY
@@ -199,7 +201,8 @@ def _open_claw_query(
         headers["Authorization"] = f"Bearer {effective_key}"
 
     text_parts: List[str] = []
-    workflow_id: Optional[str] = None  # workflow name used as identifier for deep-link
+    workflow_id: Optional[str] = None  # workflow display name (card title)
+    view_url: Optional[str] = None     # server-provided deep link, if any
 
     base_url = _base_url_override or BIOMATE_API_URL
 
@@ -222,11 +225,11 @@ def _open_claw_query(
             timeout=timeout,
         ) as resp:
             if resp.status_code == 503:
-                return "❌ BioMate AI engine不可用（API密钥未配置）。请联系管理员。", None
+                return "❌ BioMate AI engine不可用（API密钥未配置）。请联系管理员。", None, None
             if resp.status_code == 400:
-                return "❌ 请求格式错误，请重试。", None
+                return "❌ 请求格式错误，请重试。", None, None
             if resp.status_code != 200:
-                return f"❌ BioMate返回错误 {resp.status_code}，请稍后重试。", None
+                return f"❌ BioMate返回错误 {resp.status_code}，请稍后重试。", None, None
 
             for current_event, data_str in _iter_sse_events(resp):
                 try:
@@ -238,31 +241,33 @@ def _open_claw_query(
                     text_parts.append(data.get("text", ""))
 
                 elif current_event == "workflow_ready" and isinstance(data, dict):
-                    # Workflow identified — capture its name for the deep-link button.
+                    # Workflow identified — capture its display name + any view_url.
                     workflow_id = (
                         data.get("workflow_name")
                         or data.get("name")
                         or data.get("chain_display_name")
                     )
+                    view_url = view_url or data.get("view_url")
 
                 elif current_event == "final" and isinstance(data, dict):
-                    # Fallback: pick workflow name from final if workflow_ready didn't fire.
+                    # Fallback: pick workflow name / view_url from final if needed.
+                    wf = data.get("workflow") or {}
                     if not workflow_id:
-                        wf = data.get("workflow") or {}
                         workflow_id = (
                             wf.get("workflow_ga", {}).get("name")
                             or wf.get("workflow_name")
                             or wf.get("chain_display_name")
                         )
+                    view_url = view_url or data.get("view_url") or wf.get("view_url")
 
                 elif current_event in ("done", "complete"):
                     break
 
     except requests.exceptions.Timeout:
-        return "⏱ BioMate响应超时，请稍后重试。", None
+        return "⏱ BioMate响应超时，请稍后重试。", None, None
     except Exception as exc:
         log.exception(f"BioMate chat stream query failed for user {user_id}: {exc}")
-        return f"❌ BioMate查询失败：{exc}", None
+        return f"❌ BioMate查询失败：{exc}", None, None
 
     reply_text = "".join(text_parts).strip()
     if not reply_text:
@@ -272,7 +277,7 @@ def _open_claw_query(
     _push_history(user_id, "user", query)
     _push_history(user_id, "assistant", reply_text)
 
-    return reply_text, workflow_id
+    return reply_text, workflow_id, view_url
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -361,14 +366,20 @@ def handle_update(update: Dict[str, Any]) -> None:
 
     # Scientific query → BioMate chat engine.
     user_api_key = _user_bindings.get(chat_id)
-    reply_text, workflow_id = _open_claw_query(chat_id, text, api_key=user_api_key)
+    reply_text, workflow_id, view_url = _open_claw_query(chat_id, text, api_key=user_api_key)
 
     send_message(chat_id, reply_text)
 
-    # Follow-up message with the clickable deep link once a workflow is identified.
+    # Follow-up message with an Open-in-BioMate button once a workflow is identified.
+    # Prefer a server-provided view_url; otherwise open the app panel (the
+    # chat-generated workflow lives in the user's session panel, not at a
+    # name-addressable URL).
     if workflow_id:
-        # workflow_id from /api/chat/stream is already a display name — use as-is.
-        send_workflow_card(chat_id, workflow_name=workflow_id, workflow_id=workflow_id)
+        # BioMate has no per-workflow route today and no URL auto-login, so the
+        # only non-404 target is the app root (the chat home). Prefer a
+        # server-provided view_url once /api/chat/stream emits one.
+        url = view_url or BIOMATE_DEEP_LINK_BASE
+        send_workflow_card(chat_id, workflow_name=workflow_id, url=url)
 
 
 # ──────────────────────────────────────────────────────────────────────────────

@@ -114,7 +114,7 @@ class TestOpenClawQuery(unittest.TestCase):
             ("done", {}),
         ]
         with MockSSEServer(events=events) as srv:
-            reply, wf_id = _open_claw_query("u1", "Find RNA-seq", _base_url_override=srv.base_url)
+            reply, wf_id, _ = _open_claw_query("u1", "Find RNA-seq", _base_url_override=srv.base_url)
         self.assertIn("RNA-seq", reply)
         self.assertIsNone(wf_id)
 
@@ -125,7 +125,7 @@ class TestOpenClawQuery(unittest.TestCase):
             ("delta", {"text": "Should not appear."}),
         ]
         with MockSSEServer(events=events) as srv:
-            reply, _ = _open_claw_query("u2", "Test", _base_url_override=srv.base_url)
+            reply, _, _ = _open_claw_query("u2", "Test", _base_url_override=srv.base_url)
         self.assertIn("First part", reply)
         self.assertNotIn("Should not appear", reply)
 
@@ -136,7 +136,7 @@ class TestOpenClawQuery(unittest.TestCase):
             ("done", {}),
         ]
         with MockSSEServer(events=events) as srv:
-            _, wf_id = _open_claw_query("u3", "Find RNA-seq", _base_url_override=srv.base_url)
+            _, wf_id, _ = _open_claw_query("u3", "Find RNA-seq", _base_url_override=srv.base_url)
         self.assertEqual(wf_id, "rnaseq_differential")
 
     def test_history_grows_after_query(self):
@@ -148,7 +148,7 @@ class TestOpenClawQuery(unittest.TestCase):
 
     def test_503_returns_friendly_error(self):
         with MockSSEServer(status=503, events=[]) as srv:
-            reply, wf_id = _open_claw_query("u6", "Test", _base_url_override=srv.base_url)
+            reply, wf_id, _ = _open_claw_query("u6", "Test", _base_url_override=srv.base_url)
         self.assertIn("❌", reply)
         self.assertIsNone(wf_id)
 
@@ -159,7 +159,7 @@ class TestOpenClawQuery(unittest.TestCase):
             raise requests.exceptions.Timeout("timed out")
 
         with patch("feishu_bot.requests.post", side_effect=_slow_post):
-            reply, _ = _open_claw_query("u7", "Slow")
+            reply, _, _ = _open_claw_query("u7", "Slow")
         self.assertIn("⏱", reply)
 
 
@@ -325,7 +325,8 @@ class TestHandleMessageEvent(unittest.TestCase):
 
         self.assertTrue(any("ADMET" in t for t in sent))
         self.assertEqual(len(cards), 1)
-        self.assertEqual(cards[0]["workflow_id"], "predict_admet_properties")
+        self.assertEqual(cards[0]["workflow_name"], "predict_admet_properties")
+        self.assertEqual(cards[0]["url"], feishu_bot.BIOMATE_DEEP_LINK_BASE)
 
 
 if __name__ == "__main__":
