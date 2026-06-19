@@ -34,6 +34,7 @@ import threading
 import time
 from collections import deque
 from typing import Any, Deque, Dict, List, Optional, Tuple
+from urllib.parse import quote, urlparse
 
 import requests
 
@@ -343,6 +344,53 @@ def _open_claw_query(
     return reply_text, workflow_id, view_url
 
 
+def _build_magic_link(
+    api_key: Optional[str],
+    view_url: Optional[str],
+    _base_url_override: Optional[str] = None,
+) -> Optional[str]:
+    """
+    Wrap a server-provided view_url in a one-time auto-login link so the bound
+    user lands logged-in on the workflow instead of the login page.
+
+    Flow (no long-lived secret ever in the URL):
+      1. POST /api/auth/login-token  (Bearer = the user's bound BioMate api_key)
+         → a single-use, ~5-min login token.
+      2. Build  …/api/auth/magic?token=<ott>&redirect=<view_url path>  — opening
+         it sets the session cookie then 302s to the workflow.
+
+    Returns the magic URL, or None on any failure (caller falls back to the bare
+    view_url). Requires both a bound api_key and a server-provided view_url.
+    """
+    if not api_key or not view_url:
+        return None
+    api_base = (_base_url_override or BIOMATE_API_URL).rstrip("/")
+    try:
+        parsed = urlparse(view_url)
+        redirect_path = parsed.path or "/"
+        if parsed.query:
+            redirect_path += "?" + parsed.query
+        resp = requests.post(
+            f"{api_base}/api/auth/login-token",
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json={"redirect": redirect_path},
+            timeout=10,
+        )
+        if resp.status_code != 200:
+            log.warning(f"login-token failed ({resp.status_code}); using bare view_url")
+            return None
+        ott = (resp.json() or {}).get("token")
+        if not ott:
+            return None
+        return (
+            f"{api_base}/api/auth/magic"
+            f"?token={quote(ott, safe='')}&redirect={quote(redirect_path, safe='')}"
+        )
+    except Exception as exc:
+        log.warning(f"magic link build failed: {exc}")
+        return None
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Event parsing + message handler
 # ──────────────────────────────────────────────────────────────────────────────
@@ -471,14 +519,17 @@ def handle_message_event(event: Dict[str, Any], _base_url_override: Optional[str
 
     send_text_message(chat_id, reply_text, _base_url_override=_base_url_override)
 
-    # Prefer a server-provided view_url; otherwise open the app panel (the
-    # chat-generated workflow lives in the user's session panel, not at a
-    # name-addressable URL).
+    # Build the "Open in BioMate" button target, in order of preference:
+    #   1. magic auto-login link wrapping view_url (bound user → lands logged-in
+    #      on the generated workflow)
+    #   2. bare view_url (deep-links to the workflow, but may hit the login page)
+    #   3. the app root (no addressable workflow)
     if workflow_id:
-        # BioMate has no per-workflow route today and no URL auto-login, so the
-        # only non-404 target is the app root (the chat home). Prefer a
-        # server-provided view_url once /api/chat/stream emits one.
-        url = view_url or BIOMATE_DEEP_LINK_BASE
+        url = (
+            _build_magic_link(user_api_key, view_url, _base_url_override=_base_url_override)
+            or view_url
+            or BIOMATE_DEEP_LINK_BASE
+        )
         send_workflow_card(
             chat_id,
             workflow_name=workflow_id,
