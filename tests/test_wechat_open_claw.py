@@ -17,10 +17,7 @@ from io import BytesIO
 from unittest.mock import patch
 
 # Add project root to path so we can import the wechat_bot module
-import sys, os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
-
-from backend.lib.integrations.wechat_bot import (
+from connectors.wechat.wechat_bot import (
     _open_claw_query,
     _get_history,
     _push_history,
@@ -218,7 +215,7 @@ class TestOpenClawQuery(unittest.TestCase):
         def _slow_post(*args, **kwargs):
             raise requests.exceptions.Timeout("timed out")
 
-        with patch("backend.lib.integrations.wechat_bot.requests.post", side_effect=_slow_post):
+        with patch("connectors.wechat.wechat_bot.requests.post", side_effect=_slow_post):
             reply, wf_id = _open_claw_query("user7", "Slow query")
 
         self.assertIn("⏱", reply)
@@ -240,7 +237,7 @@ class TestHandleWechatMessage(unittest.TestCase):
         </xml>"""
 
     def test_bind_command_stores_key(self):
-        from backend.lib.integrations import wechat_bot
+        import connectors.wechat.wechat_bot as wechat_bot
         reply = handle_wechat_message(self._xml("bind test-key-abc"), "corp")
         self.assertIn("✅", reply)
         self.assertEqual(wechat_bot._user_bindings.get("wxuser1"), "test-key-abc")

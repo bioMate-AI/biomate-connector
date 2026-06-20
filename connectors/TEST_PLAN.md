@@ -11,7 +11,7 @@
 
 | Asset | Location | Status |
 |---|---|---|
-| OAuth 2.1 server (Python) | `oauth-server/` | Built, 7/7 unit tests passing |
+| OAuth 2.1 server (Python) | `oauth_server/` | Built, 7/7 unit tests passing |
 | Client seed script | `backend/scripts/seed_oauth_clients.py` | Built |
 | OAuth tests | `backend/tests/connectors/test_oauth_server.py` | Passing |
 | @biomate/connect installer (TS/npm) | `connectors/installer/` | Built, 8/8 unit tests passing |
@@ -439,7 +439,7 @@ ANTHROPIC_API_KEY=sk-ant-... OPENAI_API_KEY=sk-... \
 | `connectors/TEST_PLAN.md` | This file |
 | `connectors/marketing/` | Launch assets (videos, blog, social, landing) |
 | `connectors/submissions/` | Directory submission packages |
-| `oauth-server/` | OAuth source |
+| `oauth_server/` | OAuth source |
 | `connectors/installer/` | Installer source |
 
 ### Open issues / known gaps (filed before GA)

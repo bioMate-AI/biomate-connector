@@ -16,10 +16,7 @@ import unittest
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from unittest.mock import patch
 
-import sys
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
-
-from backend.lib.integrations.chatgpt_adapter import (
+from connectors.chatgpt.chatgpt_adapter import (
     dispatch_tool,
     _extract_bearer,
     _consume_chat_stream,
@@ -137,7 +134,7 @@ class TestAdapterUnit(unittest.TestCase):
 
     def test_consume_chat_stream_timeout(self):
         import requests as req
-        with patch("backend.lib.integrations.chatgpt_adapter.requests.post",
+        with patch("connectors.chatgpt.chatgpt_adapter.requests.post",
                    side_effect=req.exceptions.Timeout()):
             answer, wf_name, _ = _consume_chat_stream("Query", "")
         self.assertIn("timed out", answer.lower())
@@ -150,7 +147,7 @@ class TestAdapterUnit(unittest.TestCase):
             ("done", {}),
         ]
         with MockBioMateServer(events=events) as srv:
-            with patch("backend.lib.integrations.chatgpt_adapter.BIOMATE_API_URL", srv.base_url):
+            with patch("connectors.chatgpt.chatgpt_adapter.BIOMATE_API_URL", srv.base_url):
                 result = handle_biomate_session({"goal": "Run RNA-seq"}, "")
 
         self.assertFalse(result["isError"])
@@ -183,7 +180,7 @@ class TestAdapterUnit(unittest.TestCase):
     def test_dispatch_biomate_session_routes_correctly(self):
         events = [("delta", {"text": "Answer."}), ("done", {})]
         with MockBioMateServer(events=events) as srv:
-            with patch("backend.lib.integrations.chatgpt_adapter.BIOMATE_API_URL", srv.base_url):
+            with patch("connectors.chatgpt.chatgpt_adapter.BIOMATE_API_URL", srv.base_url):
                 result = dispatch_tool("biomate_session", {"goal": "Screen aspirin"}, "")
         self.assertFalse(result["isError"])
 

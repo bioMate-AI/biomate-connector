@@ -16,7 +16,7 @@ the sandbox has no production keys. The libraries are imported and the request
 shapes are validated structurally — the same checks the SDK does locally
 before issuing an HTTP call.
 
-Run: PYTHONPATH=. pytest backend/tests/test_connector_sandbox.py -v
+Run: PYTHONPATH=. pytest tests/test_connector_sandbox.py -v
 """
 
 from __future__ import annotations
@@ -41,10 +41,10 @@ from openapi_spec_validator import validate as validate_openapi
 import anthropic
 import openai
 
-from backend.lib.mcp import tools_manifest as tm
+from mcp import tools_manifest as tm
 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -322,7 +322,7 @@ def mcp_server(mock_backend):
         "MCP_DEBUG": "",
     }
     proc = subprocess.Popen(
-        [sys.executable, "-m", "backend.lib.mcp.biomate_mcp_server"],
+        [sys.executable, "-m", "mcp.biomate_mcp_server"],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,

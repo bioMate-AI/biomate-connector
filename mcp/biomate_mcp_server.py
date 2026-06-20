@@ -66,15 +66,21 @@ log = logging.getLogger(__name__)
 # generated from the same module. See docs/20260513_CONNECTOR_ARCHITECTURE_V2.md.
 
 try:
-    from backend.lib.mcp.tools_manifest import (  # when run from repo root
+    from backend.lib.mcp.tools_manifest import (  # when run from main repo root
         to_mcp as _manifest_to_mcp,
         get_tool as _manifest_get_tool,
     )
 except ModuleNotFoundError:
-    from tools_manifest import (  # when run as standalone package
-        to_mcp as _manifest_to_mcp,
-        get_tool as _manifest_get_tool,
-    )
+    try:
+        from .tools_manifest import (  # when imported as package (mcp.biomate_mcp_server)
+            to_mcp as _manifest_to_mcp,
+            get_tool as _manifest_get_tool,
+        )
+    except ImportError:
+        from tools_manifest import (  # when run directly as script from mcp/ dir
+            to_mcp as _manifest_to_mcp,
+            get_tool as _manifest_get_tool,
+        )
 
 TOOLS: List[Dict[str, Any]] = _manifest_to_mcp()
 
@@ -317,21 +323,19 @@ class BioMateClient:
         Each yielded dict has shape: {event: <name>, data: <parsed json or str>}.
         Emits: 'delta', 'tool_event', 'workflow_ready', 'final', 'done'.
         """
-        # /api/chat/stream expects {message, context}
-        payload: Dict[str, Any] = {"message": goal}
-        context: Dict[str, Any] = {}
+        # /api/open-claw/stream is the unified streaming endpoint that emits
+        # workflow_phase, workflow_step, finding, qc_gate, auto_loop and done events.
+        payload: Dict[str, Any] = {"goal": goal}
         if inputs:
-            context["inputs"] = inputs
+            payload["inputs"] = inputs
         if experiment_id:
-            context["experimentId"] = experiment_id
-        if context:
-            payload["context"] = context
+            payload["experiment_id"] = experiment_id
 
         headers = dict(self.session.headers)
         headers["Accept"] = "text/event-stream"
 
         with self.session.post(
-            self._url("/api/chat/stream"),
+            self._url("/api/open-claw/stream"),
             json=payload,
             headers=headers,
             stream=True,
@@ -419,11 +423,90 @@ def _normalize_sse_event(evt: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     progress; the chat stream events are used only to surface AI narration.
     """
     name = evt.get("event") or ""
-    data = evt.get("data") or {}
-    if not isinstance(data, dict):
-        data = {"raw": data}
+    raw_data = evt.get("data")
+    if isinstance(raw_data, dict):
+        data: Dict[str, Any] = raw_data
+    elif raw_data is not None:
+        data = {"raw": raw_data, "text": str(raw_data)}
+    else:
+        data = {}
 
-    # ── Workflow events SSE (primary source of structured progress) ───────────
+    # ── Simplified /api/open-claw/stream event format ─────────────────────────
+    # These are the canonical event types emitted by the Open Claw streaming
+    # endpoint. They form the public contract for all connector surfaces.
+
+    if name == "text_delta":
+        text = data.get("text") or data.get("raw") or ""
+        return {"kind": "text_delta", "summary_md": str(text), "delta": data}
+
+    if name == "workflow_phase":
+        phase_name = data.get("name") or "?"
+        status = data.get("status", "")
+        if status in ("completed", "done"):
+            return {
+                "kind": "phase_completed",
+                "summary_md": f"> **Phase: {phase_name}** — completed",
+                "delta": data,
+            }
+        if status == "failed":
+            return {
+                "kind": "phase_failed",
+                "summary_md": f"> ⚠ **Phase: {phase_name}** — failed",
+                "delta": data,
+            }
+        # "started" or any other value → phase_started
+        return {
+            "kind": "phase_started",
+            "summary_md": f"> **Phase: {phase_name}** — started",
+            "delta": data,
+        }
+
+    if name == "workflow_step":
+        step_name = data.get("name") or "?"
+        status = data.get("status", "")
+        if status == "failed":
+            return {
+                "kind": "step_failed",
+                "summary_md": f"> ⚠ Step: {step_name} — failed",
+                "delta": data,
+            }
+        # "completed" or any other terminal status
+        return {
+            "kind": "step_completed",
+            "summary_md": f"> Step: {step_name} — completed",
+            "delta": data,
+        }
+
+    if name == "qc_gate":
+        metric = data.get("metric") or "?"
+        value = data.get("value", "?")
+        verdict = data.get("verdict") or "halt"
+        return {
+            "kind": "qc_gate",
+            "summary_md": f"**QC gate — {metric}:** `{value}` → **{verdict}**",
+            "delta": data,
+        }
+
+    if name == "auto_loop":
+        param = data.get("param") or "?"
+        was = data.get("was")
+        now = data.get("now")
+        return {
+            "kind": "auto_loop_remediation",
+            "summary_md": f"Auto-loop: `{param}` {was} → {now}",
+            "delta": data,
+        }
+
+    if name == "done":
+        summary = data.get("summary_md") or "Session complete."
+        return {
+            "kind": "done",
+            "summary_md": summary,
+            "view_url": data.get("view_url"),
+            "delta": data,
+        }
+
+    # ── Internal BioMate SSE format (from /api/workflows/:id/events) ──────────
 
     if name == "chat_progress":
         # Emitted by workflow_chat_narrator.emit() via /internal/sse-inject.
@@ -602,163 +685,41 @@ class SessionRunner(threading.Thread):
 
         n = 0  # progress counter
 
-        # ── Phase 1: AI chat stream → workflow suggestion ─────────────────────
-        # Consume /api/chat/stream to get the AI response + generated workflow.
-        # Emit text_delta notifications for AI narration; capture the workflow
-        # definition from the 'final' event so we can execute it.
-
-        workflow_def: Optional[Dict[str, Any]] = None
-        ai_text_parts: List[str] = []
+        # ── Stream all events from /api/open-claw/stream ──────────────────────
+        # The server emits: text_delta, workflow_phase, workflow_step, qc_gate,
+        # auto_loop, finding, done.  We normalize each one, emit a progress
+        # notification, and on "done" break and send the final tools/call reply.
 
         for evt in self.client.open_claw_stream(goal=goal, inputs=inputs, experiment_id=experiment_id):
             ename = evt.get("event", "")
-            edata = evt.get("data") or {}
-
-            if ename == "delta" and isinstance(edata, dict):
-                text = edata.get("text", "")
-                if text:
-                    ai_text_parts.append(text)
-                    n += 1
-                    self._emit_progress({"kind": "text_delta", "summary_md": text, "delta": edata}, n)
-
-            elif ename == "final" and isinstance(edata, dict):
-                # The full AI response + generated workflow lives in 'final'.
-                wf = edata.get("workflow")
-                if isinstance(wf, dict) and wf.get("success") and not wf.get("error"):
-                    workflow_def = wf
-                    wf_name = (
-                        wf.get("workflow_ga", {}).get("name")
-                        or wf.get("workflow_name")
-                        or wf.get("chain_display_name")
-                        or "(workflow)"
-                    )
-                    n += 1
-                    self._emit_progress(
-                        {
-                            "kind": "phase_started",
-                            "summary_md": f"**Workflow ready:** {wf_name} — launching…",
-                            "delta": {"workflow_name": wf_name},
-                        },
-                        n,
-                    )
-
-            elif ename == "done":
-                break
-
-        if not workflow_def:
-            # No runnable workflow — return the AI text response as-is.
-            final_text = "".join(ai_text_parts).strip() or "Session complete."
-            send(make_response(self.req_id, {
-                "content": [{"type": "text", "text": final_text}],
-                "isError": False,
-            }))
-            return
-
-        # ── Phase 2: Execute the workflow ─────────────────────────────────────
-        # POST /api/workflows/execute and get back an invocationId.
-
-        exec_result = self.client.execute_workflow(workflow_def)
-        log.debug("execute_workflow response: %s", json.dumps(exec_result, default=str)[:300])
-
-        if exec_result.get("error"):
-            err = exec_result["error"]
-            log.warning("Workflow execution failed: %s", err)
-            send(make_error(self.req_id, -32603, "Workflow execution failed", err))
-            return
-
-        invocation_id: Optional[str] = (
-            exec_result.get("runInvocationId")
-            or exec_result.get("runId")
-        )
-        run_id: Optional[str] = (
-            exec_result.get("pipelineRunId")
-            or exec_result.get("runId")
-        )
-        self._final_run_id = invocation_id or run_id
-
-        # Build canonical view URL into BioMate panel
-        base = self.client.base_url
-        if invocation_id:
-            self._final_view_url = f"{base}/workflows/{invocation_id}"
-        elif run_id:
-            self._final_view_url = f"{base}/workflows/{run_id}"
-
-        n += 1
-        self._emit_progress(
-            {
-                "kind": "phase_started",
-                "summary_md": f"**Phase 1: Workflow launched** — run `{self._final_run_id}`",
-                "view_url": self._final_view_url,
-                "delta": {"invocation_id": invocation_id, "run_id": run_id},
-            },
-            n,
-        )
-
-        if not invocation_id:
-            # Got a run but no invocationId to subscribe to events — return early.
-            final_text = "".join(ai_text_parts).strip() or "Workflow submitted."
-            send(make_response(self.req_id, {
-                "content": [{"type": "text", "text": json.dumps({
-                    "summary_md": final_text,
-                    "run_id": run_id,
-                    "view_url": self._final_view_url,
-                    "status": exec_result.get("status"),
-                }, indent=2)}],
-                "isError": False,
-            }))
-            return
-
-        # ── Phase 3: Stream workflow events ───────────────────────────────────
-        # Subscribe to /api/workflows/:invocationId/events SSE.
-        # The Python backend pushes phase/step/QC/finding events via
-        # /internal/sse-inject → sseManager.injectRawEvent().
-
-        terminal_kinds = {"done", "phase_failed"}
-        terminal_workflow_kinds = {"workflow.completed", "workflow.failed", "workflow.cancelled"}
-
-        for evt in self.client.workflow_events_stream(invocation_id):
-            ename = evt.get("event", "")
-            edata = evt.get("data") or {}
-
-            # Detect terminal event directly before normalization
-            is_terminal = False
-            if ename == "chat_progress" and isinstance(edata, dict):
-                if edata.get("kind") in terminal_workflow_kinds:
-                    is_terminal = True
+            edata = evt.get("data")
+            if isinstance(edata, dict):
+                # Harvest run_id and view_url from any event that carries them
+                if edata.get("run_id"):
+                    self._final_run_id = edata["run_id"]
+                if edata.get("view_url"):
+                    self._final_view_url = self._final_view_url or edata["view_url"]
 
             payload = _normalize_sse_event(evt)
             if payload is not None:
                 n += 1
-                if not payload.get("view_url"):
-                    payload["view_url"] = self._final_view_url
-                self._emit_progress(payload, n)
-
-                kind = payload.get("kind")
-                if kind == "text_delta":
-                    self._final_summary_md.append(payload.get("summary_md", ""))
-                if payload.get("delta", {}).get("run_id"):
-                    self._final_run_id = payload["delta"]["run_id"]
+                # Capture view_url promoted by the normalizer (e.g. finding events)
                 if payload.get("view_url"):
-                    self._final_view_url = payload["view_url"]
+                    self._final_view_url = self._final_view_url or payload["view_url"]
+                self._emit_progress(payload, n)
+                if payload.get("kind") == "text_delta":
+                    self._final_summary_md.append(payload.get("summary_md", ""))
 
-            if is_terminal or (payload and payload.get("kind") in terminal_kinds):
+            if ename == "done":
                 break
 
-        # ── Final response ────────────────────────────────────────────────────
-        ai_summary = "".join(ai_text_parts).strip()
-        wf_summary = " ".join(self._final_summary_md).strip()
-        final_text = wf_summary or ai_summary or "Session complete."
-
+        # ── Final tools/call response ─────────────────────────────────────────
+        summary = " ".join(self._final_summary_md).strip() or "Session complete."
         result_payload: Dict[str, Any] = {
-            "summary_md": final_text,
+            "summary_md": summary,
             "run_id": self._final_run_id,
             "view_url": self._final_view_url,
         }
-        if self._final_view_url:
-            result_payload["summary_md"] += (
-                f"\n\n---\nLive panel: <{self._final_view_url}>"
-                f" · BioMate run id `{self._final_run_id}`"
-            )
 
         send(make_response(self.req_id, {
             "content": [{"type": "text", "text": json.dumps(result_payload, indent=2)}],

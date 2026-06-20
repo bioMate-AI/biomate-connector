@@ -23,7 +23,7 @@ import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from backend.lib.integrations.slack_bot import (
+from connectors.slack.slack_bot import (
     _chat_stream_query,
     _open_claw_query,
     _get_history,
@@ -204,7 +204,7 @@ class TestChatStreamQuery(unittest.TestCase):
         def _slow_post(*args, **kwargs):
             raise _req.exceptions.Timeout("timed out")
 
-        with patch("backend.lib.integrations.slack_bot.requests.post", side_effect=_slow_post):
+        with patch("connectors.slack.slack_bot.requests.post", side_effect=_slow_post):
             reply, _, _ = _chat_stream_query("u8", "Slow query")
 
         self.assertIn(":hourglass:", reply)
@@ -300,8 +300,8 @@ class TestHandleSlashCommand(unittest.TestCase):
 
         events = [("delta", {"text": "Found ADMET workflow."}), ("done", {})]
         with MockSSEServer(events=events) as srv:
-            with patch("backend.lib.integrations.slack_bot.BIOMATE_API_URL", srv.base_url), \
-                 patch("backend.lib.integrations.slack_bot.post_to_slack", side_effect=_fake_post):
+            with patch("connectors.slack.slack_bot.BIOMATE_API_URL", srv.base_url), \
+                 patch("connectors.slack.slack_bot.post_to_slack", side_effect=_fake_post):
                 resp = handle_slash_command(self._form(
                     "screen aspirin for ADMET",
                     response_url="https://hooks.slack.com/commands/fake"
@@ -326,8 +326,8 @@ class TestHandleSlashCommand(unittest.TestCase):
             ("done", {}),
         ]
         with MockSSEServer(events=events) as srv:
-            with patch("backend.lib.integrations.slack_bot.BIOMATE_API_URL", srv.base_url), \
-                 patch("backend.lib.integrations.slack_bot.post_to_slack", side_effect=_fake_post):
+            with patch("connectors.slack.slack_bot.BIOMATE_API_URL", srv.base_url), \
+                 patch("connectors.slack.slack_bot.post_to_slack", side_effect=_fake_post):
                 handle_slash_command(self._form(
                     "ADMET for aspirin",
                     response_url="https://hooks.slack.com/commands/fake"

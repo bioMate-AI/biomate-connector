@@ -47,7 +47,7 @@ Each prompt finds the right workflow from 2,455 indexed pipelines, fills require
 ```
 
 - **One source of truth for tools** — [`backend/lib/mcp/tools_manifest.py`](../backend/lib/mcp/tools_manifest.py) defines 14 tools across 3 tiers. Every surface generates its schema from this file; a CI drift test fails the build if they diverge.
-- **One OAuth 2.1 + PKCE service** — [`oauth-server/`](../oauth-server/). Scopes are per-surface; revoke individual surfaces at https://biomate.ai/account/connectors.
+- **One OAuth 2.1 + PKCE service** — [`oauth_server/`](../oauth_server/). Scopes are per-surface; revoke individual surfaces at https://biomate.ai/account/connectors.
 - **One streaming event format** — every progress event carries `kind`, `summary_md`, `view_url`, optional `thumbnail_png_b64`, plus a structured `delta`. Hosts that support `notifications/progress` (Claude Code, Cursor) render the event timeline; hosts that don't (Codex, Slack, WeChat) poll a paired tool and get the same payloads.
 
 ## What's different from a generic "run code" tool
@@ -97,7 +97,7 @@ connectors/
 ├── wechat/            # WeChat-native branding
 └── slack/             # Slack App bot
 backend/lib/mcp/                       # Tools manifest (single source of truth)
-oauth-server/   # OAuth 2.1 + PKCE server
+oauth_server/   # OAuth 2.1 + PKCE server
 skills/biomate/                        # Claude Skill bundle (catalog + render templates + OAuth)
 ```
 

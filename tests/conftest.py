@@ -5,8 +5,15 @@ from __future__ import annotations
 import base64
 import os
 import secrets
-
+import sys
 import tempfile
+from pathlib import Path
+
+# Add repo root to sys.path so all packages (mcp, connectors, oauth_server,
+# biomate_connector, lab_instruments) are importable without installation.
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
 import pytest
 

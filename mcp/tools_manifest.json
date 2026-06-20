@@ -1,6 +1,6 @@
 {
   "version": "2.0.0",
-  "generated_from": "backend/lib/mcp/tools_manifest.py",
+  "generated_from": "mcp/tools_manifest.py",
   "mcp": [
     {
       "name": "biomate_session",
@@ -275,7 +275,7 @@
     },
     {
       "name": "query_database",
-      "description": "Query a biological/chemical database by accession or name. Supported: uniprot, pdb, alphafold, ncbi_gene, dbsnp, clinvar, gnomad, kegg, reactome, chebi, pubchem, hpo, omim, string.",
+      "description": "Query a biological/chemical database by accession or name. Supported: uniprot, pdb, alphafold, ncbi_gene, dbsnp, clinvar, gnomad, kegg, reactome, chebi, chembl, hpo, string, pubmed.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -292,10 +292,10 @@
               "kegg",
               "reactome",
               "chebi",
-              "pubchem",
+              "chembl",
               "hpo",
-              "omim",
-              "string"
+              "string",
+              "pubmed"
             ]
           },
           "query": {
@@ -638,7 +638,7 @@
     },
     {
       "name": "query_database",
-      "description": "Query a biological/chemical database by accession or name. Supported: uniprot, pdb, alphafold, ncbi_gene, dbsnp, clinvar, gnomad, kegg, reactome, chebi, pubchem, hpo, omim, string.",
+      "description": "Query a biological/chemical database by accession or name. Supported: uniprot, pdb, alphafold, ncbi_gene, dbsnp, clinvar, gnomad, kegg, reactome, chebi, chembl, hpo, string, pubmed.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -655,10 +655,10 @@
               "kegg",
               "reactome",
               "chebi",
-              "pubchem",
+              "chembl",
               "hpo",
-              "omim",
-              "string"
+              "string",
+              "pubmed"
             ]
           },
           "query": {
@@ -1036,7 +1036,7 @@
       "type": "function",
       "function": {
         "name": "query_database",
-        "description": "Query a biological/chemical database by accession or name. Supported: uniprot, pdb, alphafold, ncbi_gene, dbsnp, clinvar, gnomad, kegg, reactome, chebi, pubchem, hpo, omim, string.",
+        "description": "Query a biological/chemical database by accession or name. Supported: uniprot, pdb, alphafold, ncbi_gene, dbsnp, clinvar, gnomad, kegg, reactome, chebi, chembl, hpo, string, pubmed.",
         "parameters": {
           "type": "object",
           "properties": {
@@ -1053,10 +1053,10 @@
                 "kegg",
                 "reactome",
                 "chebi",
-                "pubchem",
+                "chembl",
                 "hpo",
-                "omim",
-                "string"
+                "string",
+                "pubmed"
               ]
             },
             "query": {

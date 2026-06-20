@@ -12,10 +12,7 @@ import unittest
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from unittest.mock import patch
 
-import sys, os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
-
-from backend.lib.integrations.coze_plugin import (
+from connectors.coze.coze_plugin import (
     chat_stream_query,
     handle_query,
     verify_plugin_key,
@@ -92,21 +89,21 @@ class MockSSEServer:
 class TestAuth(unittest.TestCase):
 
     def test_no_secret_configured_allows_any_key(self):
-        with patch("backend.lib.integrations.coze_plugin.COZE_PLUGIN_SECRET", ""):
+        with patch("connectors.coze.coze_plugin.COZE_PLUGIN_SECRET", ""):
             self.assertTrue(verify_plugin_key("anything"))
             self.assertTrue(verify_plugin_key(""))
 
     def test_correct_key_allowed(self):
-        with patch("backend.lib.integrations.coze_plugin.COZE_PLUGIN_SECRET", "secret123"):
+        with patch("connectors.coze.coze_plugin.COZE_PLUGIN_SECRET", "secret123"):
             self.assertTrue(verify_plugin_key("secret123"))
 
     def test_wrong_key_rejected(self):
-        with patch("backend.lib.integrations.coze_plugin.COZE_PLUGIN_SECRET", "secret123"):
+        with patch("connectors.coze.coze_plugin.COZE_PLUGIN_SECRET", "secret123"):
             self.assertFalse(verify_plugin_key("wrong"))
             self.assertFalse(verify_plugin_key(""))
 
     def test_handle_query_returns_401_on_bad_key(self):
-        with patch("backend.lib.integrations.coze_plugin.COZE_PLUGIN_SECRET", "secret123"):
+        with patch("connectors.coze.coze_plugin.COZE_PLUGIN_SECRET", "secret123"):
             result = handle_query("Find RNA-seq workflow", plugin_key="bad")
         self.assertEqual(result.get("status"), 401)
         self.assertIn("Unauthorized", result.get("error", ""))
@@ -250,7 +247,7 @@ class TestChatStreamQuery(unittest.TestCase):
         def _slow(*args, **kwargs):
             raise req.exceptions.Timeout("timed out")
 
-        with patch("backend.lib.integrations.coze_plugin.requests.post", side_effect=_slow):
+        with patch("connectors.coze.coze_plugin.requests.post", side_effect=_slow):
             answer, wf_name, _ = chat_stream_query("sess8", "Slow query")
         self.assertIn("timed out", answer.lower())
         self.assertIsNone(wf_name)
@@ -278,7 +275,7 @@ class TestHandleQuery(unittest.TestCase):
     def test_auto_generates_session_id(self):
         events = [("delta", {"text": "Result."}), ("done", {})]
         with MockSSEServer(events=events) as srv:
-            with patch("backend.lib.integrations.coze_plugin.BIOMATE_API_URL", srv.base_url):
+            with patch("connectors.coze.coze_plugin.BIOMATE_API_URL", srv.base_url):
                 result = handle_query("Find workflow", session_id=None)
         self.assertIn("session_id", result)
         self.assertGreater(len(result["session_id"]), 0)
@@ -286,7 +283,7 @@ class TestHandleQuery(unittest.TestCase):
     def test_preserves_caller_supplied_session_id(self):
         events = [("delta", {"text": "Result."}), ("done", {})]
         with MockSSEServer(events=events) as srv:
-            with patch("backend.lib.integrations.coze_plugin.BIOMATE_API_URL", srv.base_url):
+            with patch("connectors.coze.coze_plugin.BIOMATE_API_URL", srv.base_url):
                 result = handle_query("Find workflow", session_id="my-session-42")
         self.assertEqual(result["session_id"], "my-session-42")
 
@@ -297,7 +294,7 @@ class TestHandleQuery(unittest.TestCase):
             ("done", {}),
         ]
         with MockSSEServer(events=events) as srv:
-            with patch("backend.lib.integrations.coze_plugin.BIOMATE_API_URL", srv.base_url):
+            with patch("connectors.coze.coze_plugin.BIOMATE_API_URL", srv.base_url):
                 result = handle_query("CryoEM reconstruction")
         self.assertEqual(result["workflow_name"], "cryosparc_standard_spa")
         self.assertIn("cryosparc_standard_spa", result["view_url"])
@@ -305,7 +302,7 @@ class TestHandleQuery(unittest.TestCase):
     def test_workflow_fields_absent_when_not_found(self):
         events = [("delta", {"text": "General answer."}), ("done", {})]
         with MockSSEServer(events=events) as srv:
-            with patch("backend.lib.integrations.coze_plugin.BIOMATE_API_URL", srv.base_url):
+            with patch("connectors.coze.coze_plugin.BIOMATE_API_URL", srv.base_url):
                 result = handle_query("What is PCR?")
         self.assertNotIn("workflow_name", result)
         self.assertNotIn("view_url", result)

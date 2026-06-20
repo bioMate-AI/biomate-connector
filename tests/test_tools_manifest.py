@@ -12,8 +12,8 @@ from typing import Any, Dict, List
 
 import pytest
 
-from backend.lib.mcp import tools_manifest as tm
-from backend.lib.mcp import biomate_mcp_server as srv
+from mcp import tools_manifest as tm
+from mcp import biomate_mcp_server as srv
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -105,7 +105,7 @@ def test_committed_openapi_in_sync():
     current = json.loads(committed.read_text())
     assert current == tm.to_openapi(), (
         "connectors/chatgpt/openapi.json is out of sync with tools_manifest.py. "
-        "Regenerate: `python -m backend.lib.mcp.tools_manifest`"
+        "Regenerate: `python -m mcp.tools_manifest`"
     )
 
 
@@ -120,13 +120,13 @@ def test_manifest_json_round_trips(tmp_path):
 
 def test_committed_manifest_json_in_sync():
     """Drift test: regenerate the committed JSON and diff. Fails if out of sync."""
-    committed = Path("backend/lib/mcp/tools_manifest.json")
+    committed = Path("mcp/tools_manifest.json")
     if not committed.exists():
         pytest.skip("Committed manifest not present yet")
     current = json.loads(committed.read_text())
     fresh = {
         "version": "2.0.0",
-        "generated_from": "backend/lib/mcp/tools_manifest.py",
+        "generated_from": "mcp/tools_manifest.py",
         "mcp": tm.to_mcp(),
         "anthropic": tm.to_anthropic(),
         "openai": tm.to_openai(),
@@ -142,7 +142,7 @@ def test_committed_manifest_json_in_sync():
     }
     assert current == fresh, (
         "tools_manifest.json is out of sync with tools_manifest.py. "
-        "Regenerate: `python -m backend.lib.mcp.tools_manifest`"
+        "Regenerate: `python -m mcp.tools_manifest`"
     )
 
 

@@ -225,18 +225,18 @@ class TestIlluminaBaseSpace(unittest.TestCase):
     """OAuth2 + REST connector: auth, run listing, workflow routing, payload."""
 
     def setUp(self):
-        from backend.lib.integrations import illumina_basespace_connector as mod
+        from lab_instruments import illumina_basespace_connector as mod
         # Redirect API calls to mock server
         self._orig = mod.BASESPACE_API_BASE
         mod.BASESPACE_API_BASE = _MOCK_URL
-        from backend.lib.integrations.illumina_basespace_connector import (
+        from lab_instruments.illumina_basespace_connector import (
             BaseSpaceConnector, get_authorization_url,
         )
         self.connector = BaseSpaceConnector(access_token="test-token-abc")
         self.get_auth_url = get_authorization_url
 
     def tearDown(self):
-        from backend.lib.integrations import illumina_basespace_connector as mod
+        from lab_instruments import illumina_basespace_connector as mod
         mod.BASESPACE_API_BASE = self._orig
 
     def test_auth_header_set(self):
@@ -313,7 +313,7 @@ class TestNanoporeMinKNOW(unittest.TestCase):
     """HTTP REST connector: health, positions, run detection, workflow routing."""
 
     def setUp(self):
-        from backend.lib.integrations.nanopore_minknow_connector import MinKNOWConnector
+        from lab_instruments.nanopore_minknow_connector import MinKNOWConnector
         self.connector = MinKNOWConnector(host="127.0.0.1", port=_MOCK_PORT)
 
     def test_health_returns_version(self):
@@ -376,7 +376,7 @@ class TestCryoEMEPU(unittest.TestCase):
     """EPU REST API + file-based session scan."""
 
     def setUp(self):
-        from backend.lib.integrations.cryoem_instrument_connector import EPUConnector
+        from lab_instruments.cryoem_instrument_connector import EPUConnector
         self.connector = EPUConnector(host="127.0.0.1", port=_MOCK_PORT)
 
     def test_health_returns_version(self):
@@ -421,7 +421,7 @@ class TestCryoEMEPU(unittest.TestCase):
 
     def test_file_based_scan_with_temp_dir(self):
         """scan_epu_directory detects .mrc files above threshold."""
-        from backend.lib.integrations.cryoem_instrument_connector import (
+        from lab_instruments.cryoem_instrument_connector import (
             CryoEMWatchedDirectory, scan_epu_directory,
         )
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -439,7 +439,7 @@ class TestCryoEMEPU(unittest.TestCase):
         self.assertGreaterEqual(result["movie_count"], 55)
 
     def test_file_based_scan_below_threshold_returns_none(self):
-        from backend.lib.integrations.cryoem_instrument_connector import (
+        from lab_instruments.cryoem_instrument_connector import (
             CryoEMWatchedDirectory, scan_epu_directory,
         )
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -465,19 +465,19 @@ class TestFlowCytometerSmoke(unittest.TestCase):
             self.skipTest("FCS fixture not found — run generate_fixtures.py")
 
     def test_fcs_header_cytometer_field(self):
-        from backend.lib.integrations.flow_cytometer_connector import read_fcs_header
+        from lab_instruments.flow_cytometer_connector import read_fcs_header
         meta = read_fcs_header(self.fcs)
         self.assertEqual(meta.get("version"), "FCS3.1")
         self.assertIn("cytometer", meta)
 
     def test_workflow_map_keys_non_empty(self):
-        from backend.lib.integrations.flow_cytometer_connector import _WORKFLOW_MAP
+        from lab_instruments.flow_cytometer_connector import _WORKFLOW_MAP
         self.assertGreater(len(_WORKFLOW_MAP), 0)
         for key, wf_id in _WORKFLOW_MAP.items():
             self.assertTrue(wf_id, f"Empty workflow_id for FCS type '{key}'")
 
     def test_event_payload_completeness(self):
-        from backend.lib.integrations.flow_cytometer_connector import (
+        from lab_instruments.flow_cytometer_connector import (
             read_fcs_header, detect_fcs_experiment_type, _WORKFLOW_MAP,
         )
         meta = read_fcs_header(self.fcs)
@@ -505,13 +505,13 @@ class TestLCMS(unittest.TestCase):
     def test_thermo_raw_vendor_detection(self):
         if not (FIXTURES / "thermo_run.raw").exists():
             self.skipTest("thermo_run.raw fixture not found")
-        from backend.lib.integrations.lcms_connector import detect_vendor
+        from lab_instruments.lcms_connector import detect_vendor
         vendor = detect_vendor(FIXTURES / "thermo_run.raw")
         self.assertEqual(vendor, "thermo")
 
     def test_vendor_detection_by_extension(self):
         """Vendor detection maps file extensions/directories to vendors."""
-        from backend.lib.integrations.lcms_connector import detect_vendor
+        from lab_instruments.lcms_connector import detect_vendor
 
         # .raw file → thermo (Waters .raw is a directory; Thermo .raw is a file)
         with tempfile.NamedTemporaryFile(suffix=".raw", delete=False) as f:
@@ -540,18 +540,18 @@ class TestLCMS(unittest.TestCase):
 
     def test_select_workflow_dia(self):
         """select_workflow routes DIA experiment types to correct workflow."""
-        from backend.lib.integrations.lcms_connector import select_workflow
+        from lab_instruments.lcms_connector import select_workflow
         wf = select_workflow("dia", "thermo")
         self.assertTrue(wf, "select_workflow returned empty string for DIA")
         self.assertIn("dia", wf.lower())
 
     def test_select_workflow_dda(self):
-        from backend.lib.integrations.lcms_connector import select_workflow
+        from lab_instruments.lcms_connector import select_workflow
         wf = select_workflow("dda", "thermo")
         self.assertTrue(wf, "select_workflow returned empty string for DDA")
 
     def test_lcms_event_payload_completeness(self):
-        from backend.lib.integrations.lcms_connector import select_workflow
+        from lab_instruments.lcms_connector import select_workflow
         workflow_id = select_workflow("dia", "thermo")
         event = {
             "source": "lcms_watcher",
@@ -579,15 +579,15 @@ class TestQPCRSmoke(unittest.TestCase):
             self.skipTest("qPCR fixtures not found")
 
     def test_biorad_vendor_detection(self):
-        from backend.lib.integrations.qpcr_connector import detect_qpcr_vendor, QPCRVendor
+        from lab_instruments.qpcr_connector import detect_qpcr_vendor, QPCRVendor
         self.assertEqual(detect_qpcr_vendor(self.pcrd), QPCRVendor.BIORAD)
 
     def test_abi_vendor_detection(self):
-        from backend.lib.integrations.qpcr_connector import detect_qpcr_vendor, QPCRVendor
+        from lab_instruments.qpcr_connector import detect_qpcr_vendor, QPCRVendor
         self.assertEqual(detect_qpcr_vendor(self.eds), QPCRVendor.ABI)
 
     def test_workflow_map_non_empty(self):
-        from backend.lib.integrations.qpcr_connector import _WORKFLOW_MAP
+        from lab_instruments.qpcr_connector import _WORKFLOW_MAP
         self.assertGreater(len(_WORKFLOW_MAP), 0)
         for k, v in _WORKFLOW_MAP.items():
             self.assertTrue(v, f"Empty workflow_id for qPCR type '{k}'")
@@ -601,7 +601,7 @@ class TestOpentrons(unittest.TestCase):
     """HTTP REST connector: health, protocol upload, run lifecycle, outputs."""
 
     def setUp(self):
-        from backend.lib.integrations.opentrons_connector import OpenTronsConnector
+        from lab_instruments.opentrons_connector import OpenTronsConnector
         self.connector = OpenTronsConnector(robot_ip="127.0.0.1", port=_MOCK_PORT)
 
     def test_health_check_returns_model(self):
@@ -655,7 +655,7 @@ class TestOpentrons(unittest.TestCase):
         self.assertTrue(result)
 
     def test_discover_finds_robot_at_configured_ip(self):
-        from backend.lib.integrations.opentrons_connector import OpenTronsConnector
+        from lab_instruments.opentrons_connector import OpenTronsConnector
         with patch.dict(os.environ, {"OPENTRONS_ROBOT_IPS": f"127.0.0.1:{_MOCK_PORT}".split(":")[0]}):
             # Discover will attempt health check; mock server responds on _MOCK_PORT
             # Use the connector directly rather than discover() to avoid port guessing
@@ -677,21 +677,21 @@ class TestPlateReaderSmoke(unittest.TestCase):
             self.skipTest("Plate reader fixtures not found")
 
     def test_bmg_vendor_detected(self):
-        from backend.lib.integrations.plate_reader_connector import (
+        from lab_instruments.plate_reader_connector import (
             detect_plate_reader_format, _safe_read_lines,
         )
         lines = _safe_read_lines(self.bmg)
         self.assertEqual(detect_plate_reader_format(self.bmg, lines), "bmg")
 
     def test_biotek_vendor_detected(self):
-        from backend.lib.integrations.plate_reader_connector import (
+        from lab_instruments.plate_reader_connector import (
             detect_plate_reader_format, _safe_read_lines,
         )
         lines = _safe_read_lines(self.biotek)
         self.assertEqual(detect_plate_reader_format(self.biotek, lines), "biotek")
 
     def test_workflow_map_non_empty(self):
-        from backend.lib.integrations.plate_reader_connector import _WORKFLOW_MAP
+        from lab_instruments.plate_reader_connector import _WORKFLOW_MAP
         self.assertGreater(len(_WORKFLOW_MAP), 0)
         for k, v in _WORKFLOW_MAP.items():
             self.assertTrue(v, f"Empty workflow_id for plate reader type '{k}'")
@@ -708,7 +708,7 @@ class TestSiLA2(unittest.TestCase):
     """
 
     def test_device_initialises(self):
-        from backend.lib.integrations.sila2_adapter import SiLA2Device
+        from lab_instruments.sila2_adapter import SiLA2Device
         dev = SiLA2Device(host="192.168.1.10", port=50051)
         self.assertEqual(dev.host, "192.168.1.10")
         self.assertEqual(dev.port, 50051)
@@ -716,14 +716,14 @@ class TestSiLA2(unittest.TestCase):
 
     def test_connect_returns_false_when_unreachable(self):
         """connect() should return False (not raise) when no gRPC server exists."""
-        from backend.lib.integrations.sila2_adapter import SiLA2Device
+        from lab_instruments.sila2_adapter import SiLA2Device
         dev = SiLA2Device(host="127.0.0.2", port=59999)  # no server on this port
         result = dev.connect()
         self.assertFalse(result)
 
     def test_get_server_info_stub_when_not_connected(self):
         """get_server_info() returns stub dict when client is None."""
-        from backend.lib.integrations.sila2_adapter import SiLA2Device
+        from lab_instruments.sila2_adapter import SiLA2Device
         dev = SiLA2Device(host="192.168.1.10")
         info = dev.get_server_info()
         self.assertIsInstance(info, dict)
@@ -731,13 +731,13 @@ class TestSiLA2(unittest.TestCase):
         self.assertTrue("error" in info or "name" in info or "server_name" in info)
 
     def test_list_features_returns_list(self):
-        from backend.lib.integrations.sila2_adapter import SiLA2Device
+        from lab_instruments.sila2_adapter import SiLA2Device
         dev = SiLA2Device(host="192.168.1.10")
         features = dev.list_features()
         self.assertIsInstance(features, list)
 
     def test_registry_add_and_get_device(self):
-        from backend.lib.integrations.sila2_adapter import SiLA2Registry, SiLA2Device
+        from lab_instruments.sila2_adapter import SiLA2Registry, SiLA2Device
         registry = SiLA2Registry()
         dev = registry.add_device("192.168.1.20", port=50051)
         self.assertIsInstance(dev, SiLA2Device)
@@ -745,7 +745,7 @@ class TestSiLA2(unittest.TestCase):
         self.assertIs(retrieved, dev)
 
     def test_registry_list_all(self):
-        from backend.lib.integrations.sila2_adapter import SiLA2Registry
+        from lab_instruments.sila2_adapter import SiLA2Registry
         registry = SiLA2Registry()
         registry.add_device("10.0.0.1")
         registry.add_device("10.0.0.2")
@@ -753,8 +753,8 @@ class TestSiLA2(unittest.TestCase):
         self.assertGreaterEqual(len(all_devs), 2)
 
     def test_load_from_env_parses_comma_list(self):
-        import backend.lib.integrations.sila2_adapter as sila2_mod
-        from backend.lib.integrations.sila2_adapter import SiLA2Registry
+        import lab_instruments.sila2_adapter as sila2_mod
+        from lab_instruments.sila2_adapter import SiLA2Registry
         registry = SiLA2Registry()
         # Patch the module-level constant (already imported at module load time)
         with patch.object(sila2_mod, "SILA2_DEVICE_IPS", "10.0.1.1,10.0.1.2,10.0.1.3"):
@@ -765,7 +765,7 @@ class TestSiLA2(unittest.TestCase):
         self.assertIn("10.0.1.3", hosts)
 
     def test_run_command_returns_error_when_not_connected(self):
-        from backend.lib.integrations.sila2_adapter import SiLA2Device
+        from lab_instruments.sila2_adapter import SiLA2Device
         dev = SiLA2Device(host="192.168.1.10")
         result = dev.run_command("SomeFI", "SomeCommand", {})
         self.assertIsInstance(result, dict)
@@ -780,7 +780,7 @@ class TestBenchling(unittest.TestCase):
     """REST connector: ELN entry pull, sample mapping, assay result push."""
 
     def setUp(self):
-        from backend.lib.integrations.benchling_connector import BenchlingConnector
+        from lab_instruments.benchling_connector import BenchlingConnector
         self.connector = BenchlingConnector(
             api_url=_MOCK_URL,
             api_key="sk_test_abc123",

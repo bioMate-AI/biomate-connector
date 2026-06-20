@@ -778,7 +778,7 @@
       "post": {
         "operationId": "query_database",
         "summary": "Query a biological/chemical database by accession or name.",
-        "description": "Query a biological/chemical database by accession or name. Supported: uniprot, pdb, alphafold, ncbi_gene, dbsnp, clinvar, gnomad, kegg, reactome, chebi, pubchem, hpo, omim, string.",
+        "description": "Query a biological/chemical database by accession or name. Supported: uniprot, pdb, alphafold, ncbi_gene, dbsnp, clinvar, gnomad, kegg, reactome, chebi, chembl, hpo, string, pubmed.",
         "x-streaming": false,
         "requestBody": {
           "required": true,
@@ -800,10 +800,10 @@
                       "kegg",
                       "reactome",
                       "chebi",
-                      "pubchem",
+                      "chembl",
                       "hpo",
-                      "omim",
-                      "string"
+                      "string",
+                      "pubmed"
                     ]
                   },
                   "query": {

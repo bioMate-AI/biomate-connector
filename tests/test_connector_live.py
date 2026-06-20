@@ -29,7 +29,7 @@ from typing import Any
 
 import pytest
 
-from backend.lib.mcp import tools_manifest as tm
+from mcp import tools_manifest as tm
 
 
 # A prompt that should unambiguously route to biomate_session for any frontier

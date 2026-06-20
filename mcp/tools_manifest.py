@@ -577,7 +577,7 @@ def build_manifest_json(output_path: Optional[Path] = None) -> Path:
 
     payload = {
         "version": "2.0.0",
-        "generated_from": "backend/lib/mcp/tools_manifest.py",
+        "generated_from": "mcp/tools_manifest.py",
         "mcp": to_mcp(),
         "anthropic": to_anthropic(),
         "openai": to_openai(),
@@ -594,7 +594,8 @@ def build_manifest_json(output_path: Optional[Path] = None) -> Path:
     output_path.write_text(json.dumps(payload, indent=2) + "\n")
 
     # Also write the standalone OpenAPI spec consumed by ChatGPT GPT Actions.
-    openapi_path = output_path.parent.parent.parent.parent / "connectors" / "chatgpt" / "openapi.json"
+    # output_path is mcp/tools_manifest.json; repo root is one level up.
+    openapi_path = output_path.parent.parent / "connectors" / "chatgpt" / "openapi.json"
     openapi_path.parent.mkdir(parents=True, exist_ok=True)
     openapi_path.write_text(json.dumps(to_openapi(), indent=2) + "\n")
     return output_path
@@ -608,6 +609,6 @@ def get_tool(name: str) -> Optional[ToolSchema]:
 
 
 if __name__ == "__main__":
-    # CLI: `python -m backend.lib.mcp.tools_manifest` regenerates the JSON.
+    # CLI: `python -m mcp.tools_manifest` regenerates the JSON.
     out = build_manifest_json()
     print(f"Wrote {len(TOOL_SCHEMAS)} tools → {out}")

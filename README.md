@@ -45,7 +45,7 @@ Pick your surface, authenticate once via your browser, and you're done. The CLI 
 ```
 connectors/        Per-surface install guides, MCP config snippets, and the @biomate/connect CLI
 lab_instruments/   Lab instrument connectors (Illumina, Nanopore, CryoEM, LC-MS, and 6 more)
-oauth-server/      OAuth 2.1 + PKCE authorization server (self-hostable)
+oauth_server/      OAuth 2.1 + PKCE authorization server (self-hostable)
 mcp/               Shared MCP tools manifest and server — the single source of truth for all surfaces
 skills/biomate/    Claude Skill bundle for the Anthropic Skills gallery
 tests/             Connector test suites (offline sandbox + live API + 68 lab instrument checks)
@@ -93,14 +93,14 @@ See [`connectors/README.md`](connectors/README.md) for the full tool reference.
 
 ## Self-hosting the OAuth server
 
-If you're integrating BioMate into your own infrastructure, the OAuth 2.1 + PKCE server in `oauth-server/` is self-contained and runnable independently.
+If you're integrating BioMate into your own infrastructure, the OAuth 2.1 + PKCE server in `oauth_server/` is self-contained and runnable independently.
 
 ```bash
 pip install -r requirements.txt
-python -m oauth-server
+python -m oauth_server
 ```
 
-See [`oauth-server/oauth/server.py`](oauth-server/oauth/server.py) for configuration options.
+See [`oauth_server/oauth/server.py`](oauth_server/oauth/server.py) for configuration options.
 
 ---
 
