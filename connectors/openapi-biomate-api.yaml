@@ -288,8 +288,12 @@ paths:
         | `tool_call_start` | `{id, name}` | Claude is invoking a tool |
         | `tool_call_complete` | `{id, name, input}` | Tool input fully parsed |
         | `tool_result` | `{tool_use_id, name, result}` | Synchronous tool result |
-        | `complete` | `{iterations: number}` | Loop finished (terminal) |
-        | `error` | `{error: string}` | Unhandled server error (terminal) |
+        | `complete` | `{iterations: number}` | Loop finished — **terminal** |
+        | `error` | `{error: string}` | Unhandled server error — **terminal** |
+
+        **Terminal event note**: `complete` is the authoritative terminal event
+        from this endpoint.  The MCP connector normalises it to `kind: done`
+        internally, which also accepts `done` from Galaxy-backend test fixtures.
 
         ### Message format
         Follows the [Anthropic Messages API](https://docs.anthropic.com/en/api/messages)

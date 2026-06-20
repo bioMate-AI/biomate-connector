@@ -318,18 +318,32 @@ class BioMateClient:
                 current_event = "message"  # reset after each complete event
 
     def open_claw_stream(self, goal: str, inputs: Optional[Dict[str, Any]], experiment_id: Optional[str]):
-        """Generator yielding SSE events from /api/chat/stream (BioMate's main chat endpoint).
+        """Generator yielding SSE events from POST /api/open-claw/stream.
 
         Each yielded dict has shape: {event: <name>, data: <parsed json or str>}.
-        Emits: 'delta', 'tool_event', 'workflow_ready', 'final', 'done'.
+
+        The endpoint takes {messages: [...]} in Anthropic Messages API format and
+        runs Claude with all 17 BioMate tools in an agentic loop.  It emits:
+            delta           — {text: str}          streaming text chunk
+            tool_call_start — {id, name}           tool invocation started
+            tool_call_complete — {id, name, input} tool input parsed
+            tool_result     — {tool_use_id, name, result}  tool result
+            complete        — {iterations: int}    terminal: loop finished
+            error           — {error: str}         terminal: server error
+
+        The goal / inputs / experiment_id are serialised into the first user
+        message so the inner Claude receives full context.
         """
-        # /api/open-claw/stream is the unified streaming endpoint that emits
-        # workflow_phase, workflow_step, finding, qc_gate, auto_loop and done events.
-        payload: Dict[str, Any] = {"goal": goal}
+        # Build user message content from goal + optional structured inputs.
+        content = goal
         if inputs:
-            payload["inputs"] = inputs
+            content = f"{goal}\n\nInputs:\n{json.dumps(inputs, indent=2)}"
         if experiment_id:
-            payload["experiment_id"] = experiment_id
+            content = f"{content}\n\nExperiment ID: {experiment_id}"
+
+        payload: Dict[str, Any] = {
+            "messages": [{"role": "user", "content": content}]
+        }
 
         headers = dict(self.session.headers)
         headers["Accept"] = "text/event-stream"
@@ -622,8 +636,19 @@ def _normalize_sse_event(evt: Dict[str, Any]) -> Optional[Dict[str, Any]]:
             "delta": data,
         }
 
-    # Ignore: connected, done, final, tool_event, ready, needs_input, error
-    # (not user-facing progress; handled directly in SessionRunner)
+    if name == "complete":
+        # Terminal event from POST /api/open-claw/stream (Node.js agentic loop).
+        # data = {iterations: int}
+        n_iter = data.get("iterations", 0) if isinstance(data, dict) else 0
+        return {
+            "kind": "done",
+            "summary_md": f"Session complete ({n_iter} iteration{'s' if n_iter != 1 else ''}).",
+            "delta": data,
+        }
+
+    # Ignore: connected, final, tool_event, ready, needs_input, error,
+    # tool_call_start, tool_call_complete, tool_result
+    # (not user-facing progress; handled directly in SessionRunner or not needed)
     return None
 
 
@@ -710,7 +735,9 @@ class SessionRunner(threading.Thread):
                 if payload.get("kind") == "text_delta":
                     self._final_summary_md.append(payload.get("summary_md", ""))
 
-            if ename == "done":
+            # "complete" = Node.js /api/open-claw/stream terminal event
+            # "done"     = Galaxy backend / test-fixture terminal event
+            if ename in ("done", "complete"):
                 break
 
         # ── Final tools/call response ─────────────────────────────────────────

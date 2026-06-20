@@ -20,9 +20,32 @@ import time
 import tempfile
 from pathlib import Path
 
+import pytest
+
 BIOMATE_API_URL = os.environ.get("BIOMATE_API_URL", "http://localhost:3000")
 BIOMATE_API_KEY = os.environ.get("BIOMATE_API_KEY", "")
 MCP_SERVER = Path(__file__).parent.parent / "mcp" / "biomate_mcp_server.py"
+
+
+def _server_reachable() -> bool:
+    """Quick TCP probe — skip e2e tests if BioMate isn't running."""
+    import socket
+    from urllib.parse import urlparse
+    p = urlparse(BIOMATE_API_URL)
+    host = p.hostname or "localhost"
+    port = p.port or (443 if p.scheme == "https" else 80)
+    try:
+        with socket.create_connection((host, port), timeout=2):
+            return True
+    except OSError:
+        return False
+
+
+_SERVER_UP = _server_reachable()
+requires_server = pytest.mark.skipif(
+    not _SERVER_UP,
+    reason=f"BioMate server not reachable at {BIOMATE_API_URL} — set BIOMATE_API_URL to run e2e tests",
+)
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -77,6 +100,7 @@ def recv_all(proc, timeout: float = 180.0) -> list:
 
 # ── test ─────────────────────────────────────────────────────────────────────
 
+@requires_server
 def test_biomate_session():
     env = {**os.environ, "BIOMATE_API_URL": BIOMATE_API_URL, "MCP_DEBUG": "1"}
     if BIOMATE_API_KEY:
@@ -178,6 +202,7 @@ def test_biomate_session():
             print(stderr.decode(errors="replace")[-3000:])
 
 
+@requires_server
 def test_search_workflow():
     """Quick sanity check for a non-streaming tool."""
     env = {**os.environ, "BIOMATE_API_URL": BIOMATE_API_URL}

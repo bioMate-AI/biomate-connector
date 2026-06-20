@@ -114,6 +114,9 @@ VALID_SAMPLES: Dict[str, Dict[str, Any]] = {
     "analyze_results": {"run_id": "run-xyz", "question": "any hERG hits?"},
     "explain_error": {"run_id": "run-xyz"},
     "query_database": {"database": "uniprot", "query": "P04637"},
+    "resolve_accession": {"accession": "GSE183947"},
+    "browse_data": {"source_id": "ncbi_ftp", "path": "/genomes/refseq/"},
+    "fetch_public_data": {"source_id": "ebi_ftp", "remote_path": "/pub/databases/uniprot/current_release/knowledgebase/complete/uniprot_sprot.fasta.gz"},
     "recall_memory": {"query": "previous hERG screens", "scope": "runs", "limit": 3},
     "upload_file": {"filename": "compounds.csv", "size_bytes": 1234, "content_type": "text/csv"},
 }
@@ -378,13 +381,14 @@ def test_mcp_initialize_handshake(mcp_server):
     assert resp["result"]["capabilities"]["tools"]
 
 
-def test_mcp_tools_list_returns_14_tools(mcp_server):
+def test_mcp_tools_list_returns_17_tools(mcp_server):
     _initialize(mcp_server)
     _send(mcp_server, {"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
     resp = _read_one(mcp_server)
     names = [t["name"] for t in resp["result"]["tools"]]
-    assert len(names) == 14
-    for required in ("biomate_session", "search_workflow", "get_run", "export_report"):
+    assert len(names) == 17
+    for required in ("biomate_session", "search_workflow", "get_run", "export_report",
+                     "resolve_accession", "browse_data", "fetch_public_data"):
         assert required in names
 
 
