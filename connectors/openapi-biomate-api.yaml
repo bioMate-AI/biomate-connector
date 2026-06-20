@@ -1,0 +1,1108 @@
+openapi: 3.1.0
+info:
+  title: BioMate API
+  version: "1.0"
+  description: |
+    BioMate's public REST API.  Used by MCP connectors, Claude Code extensions,
+    CI pipelines, and lab-instrument integrations to discover and run
+    bioinformatics workflows and retrieve results.
+
+    **Base URLs**
+    - Cloud:      `https://app.biomate.ai`
+    - Self-hosted / local dev: `http://localhost:5000`
+
+    **Authentication — two modes**
+
+    | Mode | How | When to use |
+    |------|-----|-------------|
+    | JWT (browser / OAuth) | `Authorization: Bearer <jwt>` or `Cookie: biomate_token=<jwt>` | Claude Desktop, Slack, ChatGPT, WeChat |
+    | Static API key (headless) | `X-API-Key: <key>` or `Authorization: Bearer <non-JWT key>` | Claude Code, Cursor, CI pipelines, lab instruments |
+
+    For static API key mode, set on the BioMate server:
+    ```
+    BIOMATE_CONNECTOR_API_KEY=<secret>   # the key the client sends
+    BIOMATE_CONNECTOR_USER_ID=<int>      # the user ID to attach to requests
+    ```
+
+    **Error format** — all 4xx/5xx responses return `{"error": "<message>"}`.
+
+    **Rate limits** — auth endpoints are rate-limited (10 req/min for login,
+    5 req/min for register).  Workflow execution is limited by subscription quota.
+
+servers:
+  - url: https://app.biomate.ai
+    description: BioMate Cloud
+  - url: http://localhost:5000
+    description: Self-hosted / local dev
+
+security:
+  - BearerJWT: []
+  - ApiKey: []
+  - Cookie: []
+
+components:
+  securitySchemes:
+    BearerJWT:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT from POST /api/auth/login
+    ApiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: Static API key (BIOMATE_CONNECTOR_API_KEY on server)
+    Cookie:
+      type: apiKey
+      in: cookie
+      name: biomate_token
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+
+    User:
+      type: object
+      properties:
+        id: { type: integer }
+        email: { type: string, format: email }
+        username: { type: string }
+        role: { type: string, enum: [user, admin] }
+        createdAt: { type: string, format: date-time }
+
+    WorkflowRun:
+      type: object
+      description: |
+        A BioMate workflow execution record.  The `output_files` and
+        `inline_findings` fields are inline convenience additions for
+        MCP/headless clients — they duplicate data from the sub-endpoints
+        so a single GET is sufficient for most tool responses.
+      properties:
+        id: { type: string, format: uuid }
+        workflowName: { type: string }
+        status:
+          type: string
+          enum: [pending, running, completed, failed, cancelled]
+        createdAt: { type: string, format: date-time }
+        startedAt: { type: string, format: date-time, nullable: true }
+        completedAt: { type: string, format: date-time, nullable: true }
+        workflowDefinition: { type: object }
+        execution:
+          type: object
+          properties:
+            status: { type: string }
+            nextflowRunId: { type: string, nullable: true }
+            galaxyInvocationId: { type: string, nullable: true }
+            s3OutputBucket: { type: string, nullable: true }
+            errorMessage: { type: string, nullable: true }
+            startedAt: { type: string, format: date-time, nullable: true }
+            completedAt: { type: string, format: date-time, nullable: true }
+        output_files:
+          type: array
+          description: S3 URIs of output files (inline field, no extra round-trip needed)
+          items: { type: string }
+        inline_findings:
+          type: array
+          description: AI-synthesized key results from the completed run
+          items: { type: object }
+
+    DataSource:
+      type: object
+      properties:
+        id: { type: string }
+        label: { type: string }
+        type: { type: string, enum: [ftp, http, s3] }
+        doc: { type: string }
+        writable: { type: boolean }
+
+    DataEntry:
+      type: object
+      properties:
+        name: { type: string }
+        type: { type: string, enum: [file, directory] }
+        size: { type: integer, nullable: true }
+        uri: { type: string }
+        modified: { type: string, format: date-time, nullable: true }
+
+    AccessionResolution:
+      type: object
+      properties:
+        accession: { type: string }
+        accession_type:
+          type: string
+          enum: [GEO_series, GEO_sample, SRA_ENA_DDBJ]
+        archive: { type: string }
+        workflow_id: { type: integer }
+        workflow_name: { type: string }
+        nextflow_path: { type: string }
+        prefilled_params:
+          type: object
+          description: |
+            Ready-to-use params for run_workflow / POST /api/workflows/execute.
+            GEO → {accession: "GSExxxx"};  SRA/ENA/DDBJ → {input: "SRRxxxx"}
+        description: { type: string }
+        ready_to_run: { type: boolean }
+        next_step:
+          type: string
+          description: Human-readable instruction for the next call
+
+  responses:
+    Unauthorized:
+      description: Authentication required or token invalid
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    BadRequest:
+      description: Missing or invalid request body
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+paths:
+
+  # ── Authentication ──────────────────────────────────────────────────────────
+
+  /api/auth/login:
+    post:
+      tags: [auth]
+      summary: Login and obtain JWT
+      description: |
+        Returns a JWT in the response body AND sets an HttpOnly `biomate_token`
+        cookie. Browser clients use the cookie; headless clients use the token.
+        `rememberMe=true` → 30-day persistent cookie; `false` → session cookie.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string }
+                rememberMe: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  token: { type: string, description: JWT }
+                  user: { $ref: '#/components/schemas/User' }
+                  subscription:
+                    type: object
+                    properties:
+                      active: { type: boolean }
+                      plan: { type: string }
+                      expiresAt: { type: string, format: date-time, nullable: true }
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '403':
+          description: Trial expired
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string, enum: [TRIAL_EXPIRED] }
+                  message: { type: string }
+
+  /api/auth/logout:
+    post:
+      tags: [auth]
+      summary: Logout — clears cookie
+      security: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+
+  /api/auth/me:
+    get:
+      tags: [auth]
+      summary: Get current authenticated user
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ── Open Claw (agentic loop) ────────────────────────────────────────────────
+
+  /api/open-claw/tools:
+    get:
+      tags: [open-claw]
+      summary: List all 17 BioMate tools
+      description: |
+        Returns the OPEN_CLAW_TOOLS schema — the same tool definitions exposed
+        by the MCP server.  Use to inspect tool names, descriptions, and input
+        schemas without running a session.
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tools:
+                    type: array
+                    items: { type: object }
+                  model: { type: string, example: claude-sonnet-4-6 }
+                  note: { type: string }
+
+  /api/open-claw/stream:
+    post:
+      tags: [open-claw]
+      summary: Agentic Claude session with BioMate tools (SSE)
+      description: |
+        Runs Claude (claude-sonnet-4-6) with all 17 BioMate tools in an agentic
+        loop, streaming progress as Server-Sent Events.  The loop continues until
+        Claude produces a response with no tool_use blocks (max 10 iterations).
+
+        ### SSE event types (emitted in this order per iteration)
+
+        | Event | Payload | Notes |
+        |-------|---------|-------|
+        | `delta` | `{text: string}` | Streaming text chunk from Claude |
+        | `tool_call_start` | `{id, name}` | Claude is invoking a tool |
+        | `tool_call_complete` | `{id, name, input}` | Tool input fully parsed |
+        | `tool_result` | `{tool_use_id, name, result}` | Synchronous tool result |
+        | `complete` | `{iterations: number}` | Loop finished (terminal) |
+        | `error` | `{error: string}` | Unhandled server error (terminal) |
+
+        ### Message format
+        Follows the [Anthropic Messages API](https://docs.anthropic.com/en/api/messages)
+        format.  Pass the full conversation history to maintain context across turns.
+
+        ### Auth note
+        The endpoint is `optionalAuth` — unauthenticated callers can call tools
+        that don't require auth, but billing and user-scoped tools (memory, private
+        runs) require authentication.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [messages]
+              properties:
+                messages:
+                  type: array
+                  description: Conversation history in Anthropic Messages format
+                  items:
+                    type: object
+                    required: [role, content]
+                    properties:
+                      role: { type: string, enum: [user, assistant] }
+                      content:
+                        oneOf:
+                          - type: string
+                          - type: array
+                            items: { type: object }
+                system:
+                  type: string
+                  description: |
+                    Optional system prompt override.  Default: BioMate scientific
+                    workflow assistant persona.
+            examples:
+              simple:
+                summary: Simple workflow request
+                value:
+                  messages:
+                    - role: user
+                      content: "Run RNA-seq on GSE183947 and identify differentially expressed genes"
+              with_system:
+                summary: With custom system prompt
+                value:
+                  messages:
+                    - role: user
+                      content: "Search for cryo-EM workflows"
+                  system: "You are a structural biologist. Use BioMate tools to answer."
+      responses:
+        '200':
+          description: SSE stream — see event types in description
+          headers:
+            Content-Type:
+              schema: { type: string, enum: [text/event-stream] }
+            Cache-Control:
+              schema: { type: string, enum: ["no-cache, no-transform"] }
+            Connection:
+              schema: { type: string, enum: [keep-alive] }
+          content:
+            text/event-stream:
+              schema: { type: string }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '503':
+          description: ANTHROPIC_API_KEY not configured on server
+
+  # ── Workflow discovery ──────────────────────────────────────────────────────
+
+  /api/workflows/search:
+    post:
+      tags: [workflows]
+      summary: Search workflows by intent
+      description: |
+        Semantic search over BioMate's 2,455-workflow database.
+        Returns ranked workflow stubs; pass a stub's `id` to
+        `/api/ai_assistant/generate_workflow` to get the full spec.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [query]
+              properties:
+                query: { type: string, example: "differential expression RNA-seq human" }
+                limit: { type: integer, default: 5 }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  workflows: { type: array, items: { type: object } }
+                  total: { type: integer }
+
+  # ── Workflow execution ──────────────────────────────────────────────────────
+
+  /api/workflows/execute:
+    post:
+      tags: [workflows]
+      summary: Execute a workflow on AWS Batch
+      description: |
+        Launches a Nextflow or Galaxy workflow.  The `workflowDefinition` is the
+        `workflow_ga` object returned by `/api/ai_assistant/generate_workflow`.
+
+        Returns a `WorkflowRun` record immediately (async).  Poll
+        `/api/workflows/runs/{id}/status` or subscribe to SSE events for progress.
+
+        **De-dup guard**: if a failed run's AutoFix is still active and you submit
+        the same workflow fingerprint, the server returns HTTP 409 to prevent
+        duplicate remediations.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [workflowDefinition]
+              properties:
+                workflowDefinition:
+                  type: object
+                  description: Full workflow_ga spec (from search/generate)
+                params:
+                  type: object
+                  description: Parameter overrides (merged on top of workflow defaults)
+                projectId: { type: string, format: uuid }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WorkflowRun' }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: AutoFix active — manual retry blocked
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string, enum: [autofix_active_retry_blocked] }
+                  message: { type: string }
+                  guidance: { type: string }
+
+  # ── Run management ──────────────────────────────────────────────────────────
+
+  /api/workflows/runs:
+    get:
+      tags: [runs]
+      summary: List workflow runs
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, default: 100, maximum: 500 }
+        - name: status
+          in: query
+          schema: { type: string, enum: [all, running, completed, failed, pending, cancelled] }
+        - name: projectId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: chatSessionId
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/WorkflowRun' }
+
+  /api/workflows/runs/{id}:
+    get:
+      tags: [runs]
+      summary: Get a run — enriched with output_files and inline_findings
+      description: |
+        Returns the full `WorkflowRun` record plus two inline convenience fields:
+
+        - **`output_files`** — `string[]` — S3 URIs of published output files.
+          Sourced from `execution.nextflowStatus.s3_output_files` (falls back to
+          `output_files`, then `[]`).
+        - **`inline_findings`** — `object[]` — AI-synthesized key results from the
+          completed run.  Sourced from `execution.nextflowStatus.findings` (falls
+          back to `ai_findings`, `key_results`, then `[]`).
+
+        **Stuck-run guard**: a run that has been `status=running` for >12 h with
+        no terminal signal is automatically transitioned to `failed` with an
+        explanatory `errorMessage`.  AWS Batch outputs may still be recoverable
+        via `/api/workflows/runs/{id}/output_files`.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WorkflowRun' }
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/workflows/runs/{id}/status:
+    get:
+      tags: [runs]
+      summary: Lightweight status poll (no full run record)
+      description: |
+        Preferred polling endpoint for MCP clients that only need the current
+        status and progress percentage.  Much lighter than GET /api/workflows/runs/{id}.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string }
+                  status: { type: string }
+                  progress: { type: number, minimum: 0, maximum: 100 }
+                  currentPhase: { type: string, nullable: true }
+                  currentStep: { type: string, nullable: true }
+
+  /api/workflows/runs/{id}/cancel:
+    post:
+      tags: [runs]
+      summary: Cancel a running or queued workflow
+      description: |
+        Sends a cancel signal to the Nextflow subprocess via the Galaxy backend,
+        then marks the run as `cancelled`.  Best-effort: if Galaxy is unreachable,
+        the frontend record is still marked `cancelled`.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  id: { type: string }
+                  status: { type: string, enum: [cancelled] }
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/workflows/runs/{id}/findings:
+    get:
+      tags: [runs]
+      summary: Get AI-synthesized findings for a completed run
+      description: Returns structured findings, QC metrics, and key results.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  findings: { type: array, items: { type: object } }
+                  qc_metrics: { type: object }
+                  summary_md: { type: string }
+
+  /api/workflows/runs/{id}/output_files:
+    get:
+      tags: [runs]
+      summary: List S3 output files for a run
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    name: { type: string }
+                    s3_uri: { type: string }
+                    s3_key: { type: string }
+                    size_bytes: { type: integer, nullable: true }
+                    content_type: { type: string, nullable: true }
+
+  /api/workflows/runs/{id}/logs:
+    get:
+      tags: [runs]
+      summary: Get Nextflow execution logs
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  stdout: { type: string }
+                  stderr: { type: string }
+                  nextflow_log: { type: string }
+
+  # ── Analysis ────────────────────────────────────────────────────────────────
+
+  /api/workflows/runs/{id}/ai/analyze:
+    post:
+      tags: [analysis]
+      summary: AI interpretation of run outputs
+      description: |
+        Asks BioMate's AI to interpret the outputs of a completed run.
+        Returns a natural-language analysis: key findings, quality metrics,
+        scientific interpretation, and recommended next steps.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                question:
+                  type: string
+                  description: |
+                    Optional specific question about the results.
+                    Example: "which compounds passed ADMET filters?"
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  analysis: { type: string }
+                  findings: { type: array, items: { type: object } }
+                  suggested_next_steps: { type: array, items: { type: string } }
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/workflows/explain_error:
+    post:
+      tags: [analysis]
+      summary: Diagnose why a workflow run failed
+      description: |
+        Asks BioMate's AI to identify the root cause of a failed run.
+        Returns the likely cause (genome mismatch, missing input, OOM, container
+        pull failure, etc.) and the specific fix to apply.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [run_id]
+              properties:
+                run_id: { type: string }
+                error_log:
+                  type: string
+                  description: Optional pasted error log if run_id lookup is unavailable
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  root_cause: { type: string }
+                  category: { type: string }
+                  fix: { type: string }
+                  fix_params: { type: object }
+
+  # ── Database queries ────────────────────────────────────────────────────────
+
+  /api/databases/query:
+    post:
+      tags: [data]
+      summary: Query a biological or chemical database
+      description: |
+        Proxies to BioMate's database integration layer.  Supported databases:
+
+        | Database | Query types |
+        |----------|------------|
+        | `uniprot` | UniProt accession (P04637), gene name, keyword |
+        | `pdb` | PDB ID (1TUP), protein name |
+        | `alphafold` | UniProt accession |
+        | `ncbi_gene` | Gene symbol (BRCA1), Entrez ID |
+        | `dbsnp` | rsID (rs7412) |
+        | `clinvar` | rsID, gene symbol, condition |
+        | `gnomad` | Variant (chr17-43093737-G-A), gene |
+        | `kegg` | Pathway ID (hsa00010), gene |
+        | `reactome` | Pathway ID, gene symbol |
+        | `chebi` | ChEBI ID (CHEBI:15422), compound name |
+        | `pubchem` | CID, SMILES, InChI, compound name |
+        | `hpo` | HPO term (HP:0001250), phenotype name |
+        | `omim` | MIM number, gene symbol, disease name |
+        | `string` | Gene symbol, protein name (interaction network) |
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [database, query]
+              properties:
+                database:
+                  type: string
+                  enum: [uniprot, pdb, alphafold, ncbi_gene, dbsnp, clinvar, gnomad, kegg, reactome, chebi, pubchem, hpo, omim, string]
+                query: { type: string }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { type: object }
+
+  # ── Public data sources ─────────────────────────────────────────────────────
+
+  /api/data/sources:
+    get:
+      tags: [data]
+      summary: List configured public data sources
+      description: |
+        Returns the public biological data sources configured in BioMate's
+        `file_sources_conf.yml`.  Currently: EBI FTP, NCBI FTP, Ensembl FTP,
+        UCSC downloads, HTTP/HTTPS public URLs.
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sources:
+                    type: array
+                    items: { $ref: '#/components/schemas/DataSource' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/data/browse:
+    get:
+      tags: [data]
+      summary: Browse a public data source directory
+      description: |
+        Lists files and subdirectories at the given path within a configured
+        data source.  Proxies to Galaxy's `/api/remote_files`.
+
+        Call `GET /api/data/sources` first to get the available `source` IDs.
+        Then navigate the FTP tree to find the exact file path to pass to
+        `POST /api/data/fetch`.
+      parameters:
+        - name: source
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [ebi_ftp, ncbi_ftp, ensembl_ftp, ucsc_downloads, http_public]
+          example: ncbi_ftp
+        - name: path
+          in: query
+          required: true
+          schema: { type: string }
+          example: /genomes/refseq/vertebrate_mammalian/Homo_sapiens/latest_assembly_versions/
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  source: { type: string }
+                  path: { type: string }
+                  entries:
+                    type: array
+                    items: { $ref: '#/components/schemas/DataEntry' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '502':
+          description: Galaxy backend unavailable
+
+  /api/data/fetch:
+    post:
+      tags: [data]
+      summary: Stage a public file into BioMate S3
+      description: |
+        Downloads a file from a public FTP server or HTTPS URL and uploads it
+        to BioMate's S3 workspace (`s3://biomate-nextflow-work/public-data/...`).
+
+        Returns the `s3_uri` and a time-limited `presigned_url`.  Use the
+        `s3_uri` directly as a workflow input parameter.
+
+        **Time estimate**: EBI/NCBI FTP transfers typically take 5–60 s per GB.
+        For very large reference genomes, prefer using `s3://` paths from a
+        pre-staged reference data bucket.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [source_id]
+              properties:
+                source_id:
+                  type: string
+                  enum: [ebi_ftp, ncbi_ftp, ensembl_ftp, ucsc_downloads, http_public]
+                remote_path:
+                  type: string
+                  description: |
+                    Path on the FTP server.  Required for ftp:// sources.
+                    Example: `/pub/databases/uniprot/current_release/knowledgebase/complete/uniprot_sprot.fasta.gz`
+                url:
+                  type: string
+                  format: uri
+                  description: |
+                    Full HTTPS URL.  Required for `http_public` source.
+                    Example: `https://zenodo.org/record/6977412/files/sequences.fasta`
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [s3_uri, filename]
+                properties:
+                  s3_uri: { type: string, example: "s3://biomate-nextflow-work/public-data/uniprot_sprot.fasta.gz" }
+                  s3_key: { type: string }
+                  presigned_url: { type: string, format: uri }
+                  filename: { type: string }
+                  size_bytes: { type: integer }
+                  source_url: { type: string }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ── Accession resolution ────────────────────────────────────────────────────
+
+  /api/accession/resolve:
+    post:
+      tags: [data]
+      summary: Resolve a public archive accession to a BioMate workflow
+      description: |
+        Classifies a GEO/SRA/ENA/DDBJ accession by prefix and returns the best
+        BioMate fetcher workflow with pre-filled parameters ready for
+        `POST /api/workflows/execute`.
+
+        **Accession routing**
+
+        | Prefix | Archive | Workflow | Param |
+        |--------|---------|----------|-------|
+        | `GSE*`, `GDS*` | GEO series | Geo Data Connector (id=10672) | `accession` |
+        | `GSM*` | GEO sample | Geo Data Connector (id=10672) | `accession` |
+        | `SRR*`, `SRX*`, `SRS*`, `SRP*` | SRA | nf-core/fetchngs (id=12704) | `input` |
+        | `ERR*`, `ERX*`, `ERP*`, `PRJEB*` | ENA | nf-core/fetchngs (id=12704) | `input` |
+        | `DRR*`, `DRP*`, `PRJDB*` | DDBJ | nf-core/fetchngs (id=12704) | `input` |
+        | `PRJNA*` | SRA/NCBI | nf-core/fetchngs (id=12704) | `input` |
+        | `E-MTAB-*`, `E-GEOD-*` | ArrayExpress | nf-core/fetchngs (id=12704) | `input` |
+
+        **Typical agentic flow**
+        ```
+        resolve_accession(GSE183947)
+          → prefilled_params: {accession: "GSE183947"}
+          → workflow_id: 10672
+        run_workflow(workflow_id=10672, params={accession: "GSE183947"})
+          → run_id: "abc-123"
+        get_run(run_id="abc-123")  # poll until completed
+        analyze_results(run_id="abc-123")
+        ```
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [accession]
+              properties:
+                accession:
+                  type: string
+                  description: Public archive accession ID
+            examples:
+              geo:
+                summary: GEO series
+                value: { accession: "GSE183947" }
+              sra:
+                summary: SRA run
+                value: { accession: "SRR12345678" }
+              ena:
+                summary: ENA project
+                value: { accession: "PRJEB12345" }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccessionResolution' }
+              examples:
+                geo_series:
+                  summary: GEO series response
+                  value:
+                    accession: "GSE183947"
+                    accession_type: "GEO_series"
+                    archive: "GEO"
+                    workflow_id: 10672
+                    workflow_name: "Geo Data Connector"
+                    nextflow_path: "nextflow_nfcore/subworkflows/genomics/geo_data_connector/main.nf"
+                    prefilled_params: { accession: "GSE183947" }
+                    description: "Downloads GEO series matrix + clinical metadata via GEOquery; emits channels ready for DESeq2/edgeR."
+                    ready_to_run: true
+                    next_step: "Call run_workflow with workflow_id=10672 and params={\"accession\":\"GSE183947\"}"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          description: Unrecognised accession format
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string }
+                  hint: { type: string }
+                  accession: { type: string }
+
+  # ── File operations ─────────────────────────────────────────────────────────
+
+  /api/files/preview:
+    post:
+      tags: [files]
+      summary: Preview a file (image / table / sequence / VCF)
+      description: |
+        Returns a preview of a file stored in S3 or provided inline.
+        - **Images**: presigned URL for direct display
+        - **CSV/TSV**: up to 100 rows as an HTML table
+        - **FASTA**: sequence count, length stats, first 3 sequences
+        - **VCF**: variant count, FILTER pass rate, first 10 variants
+        - **Text/log**: first 500 lines
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                s3_key: { type: string, description: "S3 path (s3://bucket/key)" }
+                inline_data: { type: string, description: "Small file content pasted inline (max 50 KB)" }
+                file_type:
+                  type: string
+                  enum: [image, csv, tsv, fasta, vcf, bam, text, auto]
+                  default: auto
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  file_type: { type: string }
+                  preview: { type: string }
+                  url: { type: string, format: uri, nullable: true }
+                  metadata: { type: object }
+
+  /api/uploads/signed_url:
+    post:
+      tags: [files]
+      summary: Get a presigned S3 PUT URL for direct upload
+      description: |
+        Returns a time-limited presigned S3 PUT URL.  The client uploads
+        directly to S3 (bypassing BioMate's server for large files), then
+        passes the returned `s3_uri` as a workflow input parameter.
+
+        PUT the file directly:
+        ```
+        curl -X PUT "<upload_url>" \
+          -H "Content-Type: <your_content_type>" \
+          --data-binary @your_file.fastq.gz
+        ```
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [filename]
+              properties:
+                filename: { type: string }
+                content_type: { type: string, default: application/octet-stream }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [upload_url, s3_uri]
+                properties:
+                  upload_url: { type: string, format: uri }
+                  s3_key: { type: string }
+                  s3_uri: { type: string }
+                  expires_in: { type: integer, description: Seconds until URL expires }
+
+  # ── Memory ──────────────────────────────────────────────────────────────────
+
+  /api/memory/relevant:
+    get:
+      tags: [memory]
+      summary: Retrieve relevant prior context for a goal
+      description: |
+        Returns prior runs, validated procedures, user findings, and learned
+        parameter preferences that are relevant to the given query.
+
+        Call before starting a `biomate_session` for repeat users — matching
+        prior context dramatically improves parameter auto-fill and avoids
+        re-running work the user has already done.
+      parameters:
+        - name: query
+          in: query
+          required: true
+          schema: { type: string }
+          description: What to recall — usually the user's goal or workflow name
+        - name: scope
+          in: query
+          schema: { type: string, enum: [runs, findings, procedures, all], default: all }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 5, maximum: 20 }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  runs: { type: array, items: { type: object } }
+                  findings: { type: array, items: { type: object } }
+                  procedures: { type: array, items: { type: object } }
+                  preferences: { type: object }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ── Export ──────────────────────────────────────────────────────────────────
+
+  /api/export/qc_report:
+    post:
+      tags: [export]
+      summary: Export a QC report for a run
+      description: |
+        Generates a QC report for a completed workflow invocation.
+        - `format=html` (default): Returns a self-contained HTML document
+          as an attachment (`Content-Disposition: attachment`).
+        - `format=json`: Returns the raw run data as JSON.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [invocationId]
+              properties:
+                invocationId: { type: string }
+                format:
+                  type: string
+                  enum: [html, json]
+                  default: html
+      responses:
+        '200':
+          description: HTML report or JSON data
+          content:
+            text/html:
+              schema: { type: string }
+            application/json:
+              schema: { type: object }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+tags:
+  - name: auth
+    description: Authentication — JWT login and static API key
+  - name: open-claw
+    description: Agentic Claude session with all 17 BioMate tools
+  - name: workflows
+    description: Workflow discovery and execution
+  - name: runs
+    description: Run management, status, outputs, and logs
+  - name: analysis
+    description: AI interpretation and error diagnosis
+  - name: data
+    description: Database queries, public data sources, and accession resolution
+  - name: files
+    description: File preview and S3 upload
+  - name: memory
+    description: Per-user context and procedure memory
+  - name: export
+    description: Report generation and download
