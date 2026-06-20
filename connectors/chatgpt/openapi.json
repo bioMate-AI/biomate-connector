@@ -854,6 +854,66 @@
         ]
       }
     },
+    "/tools/resolve_accession": {
+      "post": {
+        "operationId": "resolve_accession",
+        "summary": "Identify a public archive accession (GEO, SRA, ENA, DDBJ) and return the best BioMate workflow to fetch it plus pre-filled params ready for run_workflow.",
+        "description": "Identify a public archive accession (GEO, SRA, ENA, DDBJ) and return the best BioMate workflow to fetch it plus pre-filled params ready for run_workflow. Examples: GSE183947 \u2192 Geo Data Connector; SRR12345 \u2192 nf-core/fetchngs. Call this before run_workflow whenever the user provides an accession instead of a file.",
+        "x-streaming": false,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "accession": {
+                    "type": "string",
+                    "description": "Public archive accession: GSE*, GSM*, GDS*, SRR*, SRX*, SRP*, ERR*, ERX*, ERP*, DRR*, PRJNA*, PRJEB*, E-MTAB-*, E-GEOD-*"
+                  }
+                },
+                "required": [
+                  "accession"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tool result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 reauthorize via /oauth/authorize"
+          },
+          "402": {
+            "description": "Quota or billing gate triggered \u2014 see billing.biomate.ai"
+          },
+          "429": {
+            "description": "Rate limited \u2014 retry after the Retry-After header"
+          },
+          "500": {
+            "description": "Internal error"
+          }
+        },
+        "security": [
+          {
+            "BiomateOAuth": [
+              "runs:read",
+              "runs:write",
+              "workflows:search"
+            ]
+          }
+        ]
+      }
+    },
     "/tools/browse_data": {
       "post": {
         "operationId": "browse_data",

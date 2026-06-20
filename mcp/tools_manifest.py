@@ -347,6 +347,30 @@ TOOL_SCHEMAS: List[ToolSchema] = [
         backend_path="/api/databases/query",
     ),
     ToolSchema(
+        name="resolve_accession",
+        tier="analysis",
+        description=(
+            "Identify a public archive accession (GEO, SRA, ENA, DDBJ) and return the "
+            "best BioMate workflow to fetch it plus pre-filled params ready for run_workflow. "
+            "Examples: GSE183947 → Geo Data Connector; SRR12345 → nf-core/fetchngs. "
+            "Call this before run_workflow whenever the user provides an accession instead of a file."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "accession": {
+                    "type": "string",
+                    "description": (
+                        "Public archive accession: GSE*, GSM*, GDS*, SRR*, SRX*, SRP*, "
+                        "ERR*, ERX*, ERP*, DRR*, PRJNA*, PRJEB*, E-MTAB-*, E-GEOD-*"
+                    ),
+                },
+            },
+            "required": ["accession"],
+        },
+        backend_path="/api/accession/resolve",
+    ),
+    ToolSchema(
         name="browse_data",
         tier="analysis",
         description=(

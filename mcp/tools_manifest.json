@@ -310,6 +310,22 @@
       }
     },
     {
+      "name": "resolve_accession",
+      "description": "Identify a public archive accession (GEO, SRA, ENA, DDBJ) and return the best BioMate workflow to fetch it plus pre-filled params ready for run_workflow. Examples: GSE183947 \u2192 Geo Data Connector; SRR12345 \u2192 nf-core/fetchngs. Call this before run_workflow whenever the user provides an accession instead of a file.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "accession": {
+            "type": "string",
+            "description": "Public archive accession: GSE*, GSM*, GDS*, SRR*, SRX*, SRP*, ERR*, ERX*, ERP*, DRR*, PRJNA*, PRJEB*, E-MTAB-*, E-GEOD-*"
+          }
+        },
+        "required": [
+          "accession"
+        ]
+      }
+    },
+    {
       "name": "browse_data",
       "description": "Browse a public biological data repository (EBI, NCBI, Ensembl, UCSC) by listing files and directories at a given path. Use before fetch_public_data to navigate to the exact file you need (reference genomes, annotation GTFs, VCF datasets, etc.).",
       "inputSchema": {
@@ -728,6 +744,22 @@
         "required": [
           "database",
           "query"
+        ]
+      }
+    },
+    {
+      "name": "resolve_accession",
+      "description": "Identify a public archive accession (GEO, SRA, ENA, DDBJ) and return the best BioMate workflow to fetch it plus pre-filled params ready for run_workflow. Examples: GSE183947 \u2192 Geo Data Connector; SRR12345 \u2192 nf-core/fetchngs. Call this before run_workflow whenever the user provides an accession instead of a file.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "accession": {
+            "type": "string",
+            "description": "Public archive accession: GSE*, GSM*, GDS*, SRR*, SRX*, SRP*, ERR*, ERX*, ERP*, DRR*, PRJNA*, PRJEB*, E-MTAB-*, E-GEOD-*"
+          }
+        },
+        "required": [
+          "accession"
         ]
       }
     },
@@ -1192,6 +1224,25 @@
     {
       "type": "function",
       "function": {
+        "name": "resolve_accession",
+        "description": "Identify a public archive accession (GEO, SRA, ENA, DDBJ) and return the best BioMate workflow to fetch it plus pre-filled params ready for run_workflow. Examples: GSE183947 \u2192 Geo Data Connector; SRR12345 \u2192 nf-core/fetchngs. Call this before run_workflow whenever the user provides an accession instead of a file.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "accession": {
+              "type": "string",
+              "description": "Public archive accession: GSE*, GSM*, GDS*, SRR*, SRX*, SRP*, ERR*, ERX*, ERP*, DRR*, PRJNA*, PRJEB*, E-MTAB-*, E-GEOD-*"
+            }
+          },
+          "required": [
+            "accession"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
         "name": "browse_data",
         "description": "Browse a public biological data repository (EBI, NCBI, Ensembl, UCSC) by listing files and directories at a given path. Use before fetch_public_data to navigate to the exact file you need (reference genomes, annotation GTFs, VCF datasets, etc.).",
         "parameters": {
@@ -1386,6 +1437,12 @@
       "name": "query_database",
       "method": "POST",
       "path": "/api/databases/query",
+      "streaming": false
+    },
+    {
+      "name": "resolve_accession",
+      "method": "POST",
+      "path": "/api/accession/resolve",
       "streaming": false
     },
     {
