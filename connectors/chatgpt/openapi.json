@@ -854,6 +854,153 @@
         ]
       }
     },
+    "/tools/browse_data": {
+      "post": {
+        "operationId": "browse_data",
+        "summary": "Browse a public biological data repository (EBI, NCBI, Ensembl, UCSC) by listing files and directories at a given path.",
+        "description": "Browse a public biological data repository (EBI, NCBI, Ensembl, UCSC) by listing files and directories at a given path. Use before fetch_public_data to navigate to the exact file you need (reference genomes, annotation GTFs, VCF datasets, etc.).",
+        "x-streaming": false,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "source_id": {
+                    "type": "string",
+                    "enum": [
+                      "ebi_ftp",
+                      "ncbi_ftp",
+                      "ensembl_ftp",
+                      "ucsc_downloads",
+                      "http_public"
+                    ],
+                    "description": "Data source to browse."
+                  },
+                  "path": {
+                    "type": "string",
+                    "description": "Directory path to list (e.g. '/pub/databases/uniprot/current_release/')."
+                  }
+                },
+                "required": [
+                  "source_id",
+                  "path"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tool result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 reauthorize via /oauth/authorize"
+          },
+          "402": {
+            "description": "Quota or billing gate triggered \u2014 see billing.biomate.ai"
+          },
+          "429": {
+            "description": "Rate limited \u2014 retry after the Retry-After header"
+          },
+          "500": {
+            "description": "Internal error"
+          }
+        },
+        "security": [
+          {
+            "BiomateOAuth": [
+              "runs:read",
+              "runs:write",
+              "workflows:search"
+            ]
+          }
+        ]
+      }
+    },
+    "/tools/fetch_public_data": {
+      "post": {
+        "operationId": "fetch_public_data",
+        "summary": "Download a file from a public biological repository (EBI, NCBI, Ensembl, UCSC) into BioMate's S3 workspace and return a presigned URL and S3 URI.",
+        "description": "Download a file from a public biological repository (EBI, NCBI, Ensembl, UCSC) into BioMate's S3 workspace and return a presigned URL and S3 URI. Use the S3 URI as a workflow input parameter. Call browse_data first to find the exact path.",
+        "x-streaming": false,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "source_id": {
+                    "type": "string",
+                    "enum": [
+                      "ebi_ftp",
+                      "ncbi_ftp",
+                      "ensembl_ftp",
+                      "ucsc_downloads",
+                      "http_public"
+                    ],
+                    "description": "Data source the file comes from."
+                  },
+                  "remote_path": {
+                    "type": "string",
+                    "description": "Path on the FTP server (e.g. '/pub/databases/uniprot/.../uniprot_sprot.fasta.gz')."
+                  },
+                  "url": {
+                    "type": "string",
+                    "description": "For http_public source: full HTTPS URL of the file to download."
+                  }
+                },
+                "required": [
+                  "source_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tool result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 reauthorize via /oauth/authorize"
+          },
+          "402": {
+            "description": "Quota or billing gate triggered \u2014 see billing.biomate.ai"
+          },
+          "429": {
+            "description": "Rate limited \u2014 retry after the Retry-After header"
+          },
+          "500": {
+            "description": "Internal error"
+          }
+        },
+        "security": [
+          {
+            "BiomateOAuth": [
+              "runs:read",
+              "runs:write",
+              "workflows:search"
+            ]
+          }
+        ]
+      }
+    },
     "/tools/recall_memory": {
       "post": {
         "operationId": "recall_memory",

@@ -347,6 +347,60 @@ TOOL_SCHEMAS: List[ToolSchema] = [
         backend_path="/api/databases/query",
     ),
     ToolSchema(
+        name="browse_data",
+        tier="analysis",
+        description=(
+            "Browse a public biological data repository (EBI, NCBI, Ensembl, UCSC) by listing "
+            "files and directories at a given path. Use before fetch_public_data to navigate to "
+            "the exact file you need (reference genomes, annotation GTFs, VCF datasets, etc.)."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "source_id": {
+                    "type": "string",
+                    "enum": ["ebi_ftp", "ncbi_ftp", "ensembl_ftp", "ucsc_downloads", "http_public"],
+                    "description": "Data source to browse.",
+                },
+                "path": {
+                    "type": "string",
+                    "description": "Directory path to list (e.g. '/pub/databases/uniprot/current_release/').",
+                },
+            },
+            "required": ["source_id", "path"],
+        },
+        backend_path="/api/data/browse",
+    ),
+    ToolSchema(
+        name="fetch_public_data",
+        tier="analysis",
+        description=(
+            "Download a file from a public biological repository (EBI, NCBI, Ensembl, UCSC) "
+            "into BioMate's S3 workspace and return a presigned URL and S3 URI. "
+            "Use the S3 URI as a workflow input parameter. Call browse_data first to find the exact path."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "source_id": {
+                    "type": "string",
+                    "enum": ["ebi_ftp", "ncbi_ftp", "ensembl_ftp", "ucsc_downloads", "http_public"],
+                    "description": "Data source the file comes from.",
+                },
+                "remote_path": {
+                    "type": "string",
+                    "description": "Path on the FTP server (e.g. '/pub/databases/uniprot/.../uniprot_sprot.fasta.gz').",
+                },
+                "url": {
+                    "type": "string",
+                    "description": "For http_public source: full HTTPS URL of the file to download.",
+                },
+            },
+            "required": ["source_id"],
+        },
+        backend_path="/api/data/fetch",
+    ),
+    ToolSchema(
         name="recall_memory",
         tier="analysis",
         description=(
