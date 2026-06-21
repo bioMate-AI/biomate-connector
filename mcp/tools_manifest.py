@@ -63,13 +63,29 @@ TOOL_SCHEMAS: List[ToolSchema] = [
         name="biomate_session",
         tier="agentic",
         description=(
+            "**Primary entry point — use this for 90% of requests.** "
             "Run a complete BioMate scientific session from a natural-language goal. "
-            "BioMate picks the workflow, fills parameters from context, runs on BioMate cloud, "
-            "handles QC gates with auto-loop remediation, and produces findings. "
-            "While running, the tool streams progress events (phase started, step completed, "
-            "QC gate fired, auto-loop remediation, finding) to the host so the user sees "
-            "real-time updates the same way BioMate's web panel does. "
-            "Returns the final run summary, a deep link to the live panel, and the report URL."
+            "BioMate selects the right workflow from 2,455 indexed pipelines, "
+            "pre-fills parameters from your goal text, executes on BioMate cloud, "
+            "handles QC gates with auto-loop remediation, and produces structured findings. "
+            "While running, the tool streams real-time progress (phase started, step completed, "
+            "QC gate, auto-loop remediation, finding) back to the host. "
+            "Returns a final run summary, a deep link to the live results panel, and the report URL. "
+            "\n\n"
+            "**How to write the `goal` parameter** — plain English, one to three sentences:\n"
+            "• Include the *what*: analysis type + subject (e.g. 'ADMET screening', 'RNA-seq DE', 'variant calling')\n"
+            "• Include *data location*: inline SMILES/sequences, S3 paths, accession numbers, or upload first with upload_file\n"
+            "• Include key *parameters* that matter: organism, library type, comparisons, thresholds\n"
+            "• You can omit anything BioMate can infer (it will ask if genuinely ambiguous)\n"
+            "\n"
+            "**Good examples:**\n"
+            "  'Screen aspirin (CC(=O)Oc1ccccc1C(=O)O) and caffeine (Cn1cnc2c1c(=O)n(c(=O)n2C)C) for hERG inhibition, CYP3A4, and oral bioavailability'\n"
+            "  'RNA-seq differential expression on s3://lab-bucket/exp42/fastqs/ — human GRCh38, dUTP strand-specific, treated (n=3) vs control (n=3), FDR 0.05'\n"
+            "  'Whole-genome variant calling on the uploaded FASTQ pair, GRCh38, GATK HaplotypeCaller, germline mode'\n"
+            "  'Run homogeneous 3D refinement in CryoSPARC on s3://cryo/job042/, C2 symmetry, box size 256'\n"
+            "  'Fetch GSE183947 from GEO and run the same RNA-seq pipeline'\n"
+            "\n"
+            "Use run_workflow instead when the user wants to call a specific workflow by ID with explicit parameter control."
         ),
         input_schema={
             "type": "object",
@@ -77,29 +93,34 @@ TOOL_SCHEMAS: List[ToolSchema] = [
                 "goal": {
                     "type": "string",
                     "description": (
-                        "Natural language description of what to do. Examples: "
-                        "'screen these 12 SMILES for hERG and CYP3A4 liability', "
-                        "'run RNA-seq pipeline on FASTQ files in s3://bucket/exp42/, human, paired-end', "
-                        "'predict the structure of P04637 and the top 5 destabilizing mutations'."
+                        "Natural-language scientific goal. Include: analysis type, data location "
+                        "(inline SMILES/sequences, s3:// paths, or GEO/SRA accession numbers), "
+                        "and key parameters (organism, comparisons, thresholds). "
+                        "BioMate infers the rest. "
+                        "Examples: "
+                        "'Screen these 5 SMILES for hERG IC50 and CYP3A4 inhibition', "
+                        "'RNA-seq DE on s3://bucket/exp1/ human GRCh38 paired-end treated vs control', "
+                        "'Fetch GSE183947 and run differential expression'."
                     ),
                 },
                 "inputs": {
                     "type": "object",
                     "description": (
                         "Optional structured inputs (S3 keys, sequences, SMILES, parameter overrides). "
-                        "BioMate will merge these with whatever it extracts from `goal`."
+                        "BioMate merges these with what it extracts from `goal`. "
+                        "Example: {\"smiles_list\": [\"CC(=O)Oc1ccccc1C(=O)O\"], \"organism\": \"human\"}"
                     ),
                     "additionalProperties": True,
                 },
                 "experiment_id": {
                     "type": "string",
-                    "description": "Optional experiment to attach this run to (from recall_memory or create_experiment).",
+                    "description": "Optional experiment to attach this run to (from recall_memory).",
                 },
                 "stream": {
                     "type": "boolean",
                     "description": (
                         "Emit progress notifications during execution. Default true. "
-                        "Set false for hosts without notification support (then poll get_run)."
+                        "Set false for hosts without MCP notification support — then poll with get_run."
                     ),
                     "default": True,
                 },
@@ -374,24 +395,32 @@ TOOL_SCHEMAS: List[ToolSchema] = [
         name="browse_data",
         tier="analysis",
         description=(
-            "Browse a public biological data repository (EBI, NCBI, Ensembl, UCSC) by listing "
-            "files and directories at a given path. Use before fetch_public_data to navigate to "
-            "the exact file you need (reference genomes, annotation GTFs, VCF datasets, etc.)."
+            "Browse a biological data repository or S3 workspace by listing files and directories "
+            "at a given path. Public sources (EBI, NCBI, Ensembl, UCSC) require a path. "
+            "S3 sources (biomate_workspace, user_s3) accept an optional prefix. "
+            "Use before fetch_public_data to navigate to the exact file you need."
         ),
         input_schema={
             "type": "object",
             "properties": {
                 "source_id": {
                     "type": "string",
-                    "enum": ["ebi_ftp", "ncbi_ftp", "ensembl_ftp", "ucsc_downloads", "http_public"],
-                    "description": "Data source to browse.",
+                    "enum": [
+                        "ebi_ftp", "ncbi_ftp", "ensembl_ftp", "ucsc_downloads",
+                        "http_public", "biomate_workspace", "user_s3",
+                    ],
+                    "description": (
+                        "Data source to browse. "
+                        "biomate_workspace = BioMate's S3 work bucket; "
+                        "user_s3 = user's own S3 bucket (if configured)."
+                    ),
                 },
                 "path": {
                     "type": "string",
-                    "description": "Directory path to list (e.g. '/pub/databases/uniprot/current_release/').",
+                    "description": "Directory path or S3 prefix to list (e.g. '/pub/databases/uniprot/' or 'results/run-xyz/').",
                 },
             },
-            "required": ["source_id", "path"],
+            "required": ["source_id"],
         },
         backend_path="/api/data/browse",
     ),
@@ -472,6 +501,26 @@ TOOL_SCHEMAS: List[ToolSchema] = [
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Lite tool set — 3 tools for consumer surfaces (Claude.ai, ChatGPT GPT, Slack)
+# ──────────────────────────────────────────────────────────────────────────────
+# Consumer surfaces (Claude.ai skills, ChatGPT GPTs, Slack bots) have context
+# constraints and users who expect simplicity. Presenting 17 tools overwhelms
+# the AI model's tool-selection heuristics and confuses end users.
+#
+# The lite set covers 90% of use cases:
+#   biomate_session  — run any analysis (the only tool most users ever need)
+#   upload_file      — get a presigned URL to upload a local file first
+#   export_report    — download findings as PDF/DOCX after a run completes
+#
+# The full 17-tool set is available for power users who configure MCP directly
+# (Claude Desktop, Cursor, Codex) or use the BioMate API programmatically.
+
+LITE_TOOL_NAMES: set = {"biomate_session", "upload_file", "export_report"}
+
+_LITE_SCHEMAS = [t for t in TOOL_SCHEMAS if t.name in LITE_TOOL_NAMES]
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Surface-specific exporters
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -512,6 +561,39 @@ def to_openai() -> List[Dict[str, Any]]:
             },
         }
         for t in TOOL_SCHEMAS
+    ]
+
+
+# ── Lite variants (3 tools) ───────────────────────────────────────────────────
+
+def to_lite_mcp() -> List[Dict[str, Any]]:
+    """Lite MCP tool list (3 tools) for consumer surfaces."""
+    return [
+        {"name": t.name, "description": t.description, "inputSchema": t.input_schema}
+        for t in _LITE_SCHEMAS
+    ]
+
+
+def to_lite_anthropic() -> List[Dict[str, Any]]:
+    """Lite Anthropic tool list (3 tools) for Claude.ai skills and API lite usage."""
+    return [
+        {"name": t.name, "description": t.description, "input_schema": t.input_schema}
+        for t in _LITE_SCHEMAS
+    ]
+
+
+def to_lite_openai() -> List[Dict[str, Any]]:
+    """Lite OpenAI tool list (3 tools) for ChatGPT GPTs and simple API usage."""
+    return [
+        {
+            "type": "function",
+            "function": {
+                "name": t.name,
+                "description": t.description,
+                "parameters": t.input_schema,
+            },
+        }
+        for t in _LITE_SCHEMAS
     ]
 
 
@@ -656,9 +738,17 @@ def build_manifest_json(output_path: Optional[Path] = None) -> Path:
     payload = {
         "version": "2.0.0",
         "generated_from": "mcp/tools_manifest.py",
+        # Full 17-tool set (MCP Desktop, Cursor, Codex, programmatic API)
         "mcp": to_mcp(),
         "anthropic": to_anthropic(),
         "openai": to_openai(),
+        # Lite 3-tool set (Claude.ai skills, ChatGPT GPTs, Slack/WeChat bots)
+        "lite": {
+            "mcp": to_lite_mcp(),
+            "anthropic": to_lite_anthropic(),
+            "openai": to_lite_openai(),
+            "tool_names": sorted(LITE_TOOL_NAMES),
+        },
         "backend_routes": [
             {
                 "name": t.name,

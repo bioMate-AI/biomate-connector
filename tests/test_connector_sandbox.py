@@ -133,6 +133,49 @@ def test_valid_sample_passes_schema(tool):
     Draft202012Validator(tool.input_schema).validate(VALID_SAMPLES[tool.name])
 
 
+def test_lite_tool_set_has_correct_tools():
+    """Lite set must be exactly {biomate_session, upload_file, export_report}."""
+    lite = tm.to_lite_mcp()
+    names = {t["name"] for t in lite}
+    assert names == tm.LITE_TOOL_NAMES, f"Unexpected lite set: {names}"
+    assert len(lite) == 3
+
+
+def test_lite_set_is_subset_of_full():
+    """Every lite tool must appear in the full set with identical schema."""
+    full_by_name = {t["name"]: t for t in tm.to_mcp()}
+    for t in tm.to_lite_mcp():
+        assert t["name"] in full_by_name, f"Lite tool {t['name']!r} missing from full set"
+        assert t["inputSchema"] == full_by_name[t["name"]]["inputSchema"]
+
+
+def test_biomate_session_description_mentions_entry_point():
+    """biomate_session description must signal it's the primary entry point."""
+    desc = tm.get_tool("biomate_session").description
+    # Must mention 'primary' or '90%' to guide the AI
+    assert "primary" in desc.lower() or "90%" in desc, (
+        "biomate_session description should signal it is the primary entry point"
+    )
+
+
+def test_biomate_session_goal_has_examples():
+    """goal parameter description must include concrete domain examples."""
+    goal_desc = tm.get_tool("biomate_session").input_schema["properties"]["goal"]["description"]
+    # Should mention at least two of: SMILES, RNA-seq, s3://, accession, GEO/SRA
+    hits = sum(1 for kw in ["SMILES", "RNA-seq", "s3://", "accession", "GEO", "SRA"] if kw.lower() in goal_desc.lower())
+    assert hits >= 2, f"goal description should have ≥2 domain examples, found {hits}"
+
+
+def test_manifest_json_has_lite_section():
+    """tools_manifest.json must include the 'lite' section with 3-tool subsets."""
+    manifest_path = REPO_ROOT / "mcp" / "tools_manifest.json"
+    assert manifest_path.exists(), "tools_manifest.json not found"
+    manifest = json.loads(manifest_path.read_text())
+    assert "lite" in manifest, "Missing 'lite' section in tools_manifest.json"
+    assert len(manifest["lite"]["mcp"]) == 3
+    assert set(manifest["lite"]["tool_names"]) == tm.LITE_TOOL_NAMES
+
+
 def test_missing_required_field_rejected():
     """biomate_session requires `goal` — empty dict must fail."""
     schema = tm.get_tool("biomate_session").input_schema
@@ -498,3 +541,58 @@ def test_mcp_legacy_tool_aliases_still_work(mcp_server):
     # Mock backend returns 404 for /api/pipeline/runs/.../status, but the dispatcher
     # should still resolve the call (not return -32601 Method not found).
     assert resp.get("error", {}).get("code") != -32601, "legacy alias must still dispatch"
+
+
+def test_mcp_error_envelope_on_http_error(mcp_server):
+    """On HTTP 4xx/5xx the result dict must have error=True, code, human_message, debug."""
+    _initialize(mcp_server)
+    # get_run with a run_id the mock backend 404s on (/api/workflows/runs/<id>)
+    # Mock backend returns 200 for /api/workflows/runs/* so use a non-existent path
+    # to trigger a 404 — call cancel_run which POSTs to /api/workflows/runs/<id>/cancel
+    _send(mcp_server, {"jsonrpc": "2.0", "id": 60, "method": "tools/call",
+                       "params": {"name": "cancel_run", "arguments": {"run_id": "run-mock-no-cancel"}}})
+    resp = _read_one(mcp_server, timeout=10)
+    assert "result" in resp, f"Expected result envelope, got: {resp}"
+    content_text = resp["result"]["content"][0]["text"]
+    parsed = json.loads(content_text)
+    # Error cases have error=True (bool), code, human_message, debug
+    assert parsed.get("error") is True, f"Expected error=True, got: {parsed}"
+    assert "code" in parsed, f"Expected 'code' field: {parsed}"
+    assert "human_message" in parsed, f"Expected 'human_message' field: {parsed}"
+    assert "debug" in parsed, f"Expected 'debug' field: {parsed}"
+    assert isinstance(parsed["human_message"], str) and len(parsed["human_message"]) > 10
+    # isError on the MCP envelope should match
+    assert resp["result"]["isError"] is True, f"MCP isError should be True: {resp['result']}"
+
+
+def test_mcp_error_envelope_on_connection_error():
+    """On connection refused _classify_exc returns SERVER_UNREACHABLE with human_message."""
+    # Spin up an MCP server pointing at a port where nothing is listening
+    env = {
+        **os.environ,
+        "BIOMATE_API_URL": "http://127.0.0.1:1",  # port 1 = always refused
+        "PYTHONPATH": str(REPO_ROOT),
+        "MCP_DEBUG": "",
+    }
+    proc = subprocess.Popen(
+        [sys.executable, "-m", "mcp.biomate_mcp_server"],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env=env,
+        bufsize=0,
+    )
+    try:
+        _initialize(proc)
+        _send(proc, {"jsonrpc": "2.0", "id": 70, "method": "tools/call",
+                     "params": {"name": "list_runs", "arguments": {}}})
+        resp = _read_one(proc, timeout=10)
+        assert "result" in resp, f"Expected result, got: {resp}"
+        parsed = json.loads(resp["result"]["content"][0]["text"])
+        assert parsed.get("error") is True
+        assert parsed.get("code") == "SERVER_UNREACHABLE"
+        assert "connect" in parsed["human_message"].lower() or "server" in parsed["human_message"].lower()
+        assert resp["result"]["isError"] is True
+    finally:
+        proc.terminate()
+        proc.wait(timeout=3)

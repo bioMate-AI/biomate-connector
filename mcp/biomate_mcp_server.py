@@ -102,6 +102,113 @@ class BioMateClient:
     def _url(self, path: str) -> str:
         return f"{self.base_url}{path}"
 
+    @staticmethod
+    def _classify_exc(exc: Exception) -> Dict[str, str]:
+        """Convert an exception into a structured error dict the AI can act on.
+
+        Returns {"error": True, "code": ..., "human_message": ..., "debug": ...}
+        where `code` is a stable machine-readable token and `human_message` is
+        what the AI should relay verbatim to the user.
+        """
+        import requests as _req
+        debug = str(exc)
+
+        # Connection-level errors — server not reachable
+        if isinstance(exc, _req.exceptions.ConnectionError):
+            return {
+                "error": True,
+                "code": "SERVER_UNREACHABLE",
+                "human_message": (
+                    "BioMate could not connect to the analysis server. "
+                    "Please try again in a moment, or check your network connection."
+                ),
+                "debug": debug,
+            }
+
+        if isinstance(exc, _req.exceptions.Timeout):
+            return {
+                "error": True,
+                "code": "TIMEOUT",
+                "human_message": (
+                    "The BioMate server did not respond in time. "
+                    "Long-running analyses can take a few minutes — "
+                    "use get_run to check the status, or try again shortly."
+                ),
+                "debug": debug,
+            }
+
+        if isinstance(exc, _req.exceptions.HTTPError) and exc.response is not None:
+            status = exc.response.status_code
+            try:
+                body = exc.response.json()
+                server_msg = body.get("message") or body.get("error") or ""
+            except Exception:
+                server_msg = exc.response.text[:200]
+
+            if status == 401:
+                return {
+                    "error": True,
+                    "code": "AUTH_FAILED",
+                    "human_message": (
+                        "BioMate rejected the API key. "
+                        "Please check that BIOMATE_API_KEY is set correctly. "
+                        "You can generate a key at Settings → API Keys in the BioMate UI."
+                    ),
+                    "debug": f"HTTP 401: {server_msg}",
+                }
+            if status == 403:
+                return {
+                    "error": True,
+                    "code": "FORBIDDEN",
+                    "human_message": (
+                        "Your account does not have permission to perform this action. "
+                        f"Server said: {server_msg}" if server_msg else
+                        "Your account does not have permission to perform this action."
+                    ),
+                    "debug": f"HTTP 403: {server_msg}",
+                }
+            if status == 404:
+                return {
+                    "error": True,
+                    "code": "NOT_FOUND",
+                    "human_message": (
+                        f"The requested resource was not found. {server_msg}"
+                        if server_msg else
+                        "The requested resource was not found. "
+                        "Check the run_id or workflow_id and try again."
+                    ),
+                    "debug": f"HTTP 404: {server_msg}",
+                }
+            if status == 429:
+                return {
+                    "error": True,
+                    "code": "RATE_LIMITED",
+                    "human_message": (
+                        "BioMate rate limit reached. Please wait a moment before retrying."
+                    ),
+                    "debug": f"HTTP 429: {server_msg}",
+                }
+            if status >= 500:
+                return {
+                    "error": True,
+                    "code": "SERVER_ERROR",
+                    "human_message": (
+                        f"BioMate returned a server error (HTTP {status}). "
+                        "This is usually transient — please try again. "
+                        f"Details: {server_msg}" if server_msg else
+                        f"BioMate returned a server error (HTTP {status}). Please try again."
+                    ),
+                    "debug": f"HTTP {status}: {server_msg}",
+                }
+
+        # Generic fallback
+        return {
+            "error": True,
+            "code": "UNKNOWN_ERROR",
+            "human_message": f"An unexpected error occurred: {debug[:300]}",
+            "debug": debug,
+        }
+
     def search_workflow(self, query: str, limit: int = 5) -> Dict[str, Any]:
         try:
             r = self.session.post(
@@ -112,7 +219,7 @@ class BioMateClient:
             r.raise_for_status()
             return r.json()
         except Exception as exc:
-            return {"error": str(exc), "results": []}
+            return {**self._classify_exc(exc), "results": []}
 
     def run_workflow(self, workflow_id: str, params: dict, session_message: Optional[str] = None) -> Dict[str, Any]:
         payload: Dict[str, Any] = {"workflow_id": workflow_id, "params": params or {}}
@@ -127,7 +234,7 @@ class BioMateClient:
             r.raise_for_status()
             return r.json()
         except Exception as exc:
-            return {"error": str(exc)}
+            return self._classify_exc(exc)
 
     def get_run_status(self, run_id: str) -> Dict[str, Any]:
         try:
@@ -138,7 +245,7 @@ class BioMateClient:
             r.raise_for_status()
             return r.json()
         except Exception as exc:
-            return {"error": str(exc), "run_id": run_id}
+            return {**self._classify_exc(exc), "run_id": run_id}
 
     def get_run_results(self, run_id: str) -> Dict[str, Any]:
         try:
@@ -149,7 +256,7 @@ class BioMateClient:
             r.raise_for_status()
             return r.json()
         except Exception as exc:
-            return {"error": str(exc), "run_id": run_id}
+            return {**self._classify_exc(exc), "run_id": run_id}
 
     def query_database(self, database: str, query: str) -> Dict[str, Any]:
         try:
@@ -161,7 +268,7 @@ class BioMateClient:
             r.raise_for_status()
             return r.json()
         except Exception as exc:
-            return {"error": str(exc), "database": database, "query": query}
+            return {**self._classify_exc(exc), "database": database, "query": query}
 
     def analyze_file(self, s3_key: Optional[str], inline_data: Optional[str], file_type: str = "auto") -> Dict[str, Any]:
         payload: Dict[str, Any] = {"file_type": file_type}
@@ -174,7 +281,7 @@ class BioMateClient:
             r.raise_for_status()
             return r.json()
         except Exception as exc:
-            return {"error": str(exc)}
+            return self._classify_exc(exc)
 
     def cancel_run(self, run_id: str) -> Dict[str, Any]:
         try:
@@ -182,7 +289,7 @@ class BioMateClient:
             r.raise_for_status()
             return r.json()
         except Exception as exc:
-            return {"error": str(exc), "run_id": run_id}
+            return {**self._classify_exc(exc), "run_id": run_id}
 
     def list_runs(self, limit: int = 10, status: str = "all") -> Dict[str, Any]:
         params: Dict[str, str] = {"limit": str(limit)}
@@ -193,7 +300,7 @@ class BioMateClient:
             r.raise_for_status()
             return r.json()
         except Exception as exc:
-            return {"error": str(exc)}
+            return self._classify_exc(exc)
 
     def analyze_results(self, run_id: str, question: str) -> Dict[str, Any]:
         try:
@@ -205,7 +312,7 @@ class BioMateClient:
             r.raise_for_status()
             return r.json()
         except Exception as exc:
-            return {"error": str(exc), "run_id": run_id}
+            return {**self._classify_exc(exc), "run_id": run_id}
 
     def explain_error(self, run_id: str, error_log: str = "") -> Dict[str, Any]:
         try:
@@ -217,7 +324,7 @@ class BioMateClient:
             r.raise_for_status()
             return r.json()
         except Exception as exc:
-            return {"error": str(exc), "run_id": run_id}
+            return {**self._classify_exc(exc), "run_id": run_id}
 
     # ── Tier 2/3 (v2 manifest) ────────────────────────────────────────────────
 
@@ -231,7 +338,7 @@ class BioMateClient:
             r.raise_for_status()
             return r.json()
         except Exception as exc:
-            return {"error": str(exc), "workflow_id": workflow_id}
+            return {**self._classify_exc(exc), "workflow_id": workflow_id}
 
     def get_run(self, run_id: str, include_findings: bool = True) -> Dict[str, Any]:
         try:
@@ -243,7 +350,7 @@ class BioMateClient:
             r.raise_for_status()
             return r.json()
         except Exception as exc:
-            return {"error": str(exc), "run_id": run_id}
+            return {**self._classify_exc(exc), "run_id": run_id}
 
     def preview_file(self, s3_key: str, run_id: Optional[str] = None, max_rows: int = 100) -> Dict[str, Any]:
         payload: Dict[str, Any] = {"s3_key": s3_key, "max_rows": max_rows}
@@ -254,7 +361,7 @@ class BioMateClient:
             r.raise_for_status()
             return r.json()
         except Exception as exc:
-            return {"error": str(exc), "s3_key": s3_key}
+            return {**self._classify_exc(exc), "s3_key": s3_key}
 
     def export_report(self, run_id: str, fmt: str = "pdf", sections: Optional[List[str]] = None) -> Dict[str, Any]:
         payload: Dict[str, Any] = {"format": fmt}
@@ -269,7 +376,7 @@ class BioMateClient:
             r.raise_for_status()
             return r.json()
         except Exception as exc:
-            return {"error": str(exc), "run_id": run_id}
+            return {**self._classify_exc(exc), "run_id": run_id}
 
     def recall_memory(self, query: str, scope: str = "all", limit: int = 5) -> Dict[str, Any]:
         try:
@@ -281,7 +388,7 @@ class BioMateClient:
             r.raise_for_status()
             return r.json()
         except Exception as exc:
-            return {"error": str(exc)}
+            return self._classify_exc(exc)
 
     def upload_signed_url(self, filename: str, size_bytes: Optional[int], content_type: Optional[str]) -> Dict[str, Any]:
         payload: Dict[str, Any] = {"filename": filename}
@@ -294,7 +401,7 @@ class BioMateClient:
             r.raise_for_status()
             return r.json()
         except Exception as exc:
-            return {"error": str(exc), "filename": filename}
+            return {**self._classify_exc(exc), "filename": filename}
 
     @staticmethod
     def _iter_sse(resp) -> "Generator[Dict[str, Any], None, None]":
@@ -383,7 +490,7 @@ class BioMateClient:
             r.raise_for_status()
             return r.json()
         except Exception as exc:
-            return {"error": str(exc)}
+            return self._classify_exc(exc)
 
     def workflow_events_stream(self, invocation_id: str):
         """Generator yielding SSE events from /api/workflows/:id/events.
@@ -928,9 +1035,12 @@ def handle_request(client: BioMateClient, msg: Dict[str, Any]) -> Optional[Dict[
         try:
             result = dispatch_tool(client, tool_name, tool_args)
             content_text = json.dumps(result, indent=2, default=str)
+            # Structured error: {"error": True, "code": ..., "human_message": ..., "debug": ...}
+            # (error=True boolean, set by _classify_exc — distinct from {"error": <string>} from old code)
+            is_err = isinstance(result, dict) and result.get("error") is True
             return make_response(req_id, {
                 "content": [{"type": "text", "text": content_text}],
-                "isError": "error" in result if isinstance(result, dict) else False,
+                "isError": is_err,
             })
         except ValueError as exc:
             return make_error(req_id, -32601, str(exc))

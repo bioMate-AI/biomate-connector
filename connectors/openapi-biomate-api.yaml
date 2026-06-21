@@ -854,6 +854,65 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
+  # ── S3 workspace browser ────────────────────────────────────────────────────
+
+  /api/s3/browse:
+    get:
+      tags: [data]
+      summary: List objects in BioMate's S3 workspace (or user's own bucket)
+      description: |
+        Returns a directory-style listing of S3 objects at the given prefix.
+
+        **Credential resolution order (server-side)**
+        1. User-stored S3 credential (`aws_access_key_id` / secret / region / `s3_bucket`
+           saved via `POST /api/users/credentials`)
+        2. BioMate's own workspace bucket (`NEXTFLOW_S3_BUCKET` env var) using the
+           instance IAM role — no explicit credentials needed
+
+        Each entry is one of:
+        - `{"type": "prefix", "key": "folder/", "name": "folder/"}` — virtual directory
+        - `{"type": "object", "key": "file.txt", "name": "file.txt", "size": 123, "last_modified": "..."}`
+      security:
+        - BearerJWT: []
+        - ApiKey: []
+        - Cookie: []
+      parameters:
+        - name: prefix
+          in: query
+          required: false
+          schema: { type: string, default: "" }
+          description: S3 key prefix to list (acts like a directory path)
+          example: results/run-abc123/
+        - name: max_keys
+          in: query
+          required: false
+          schema: { type: integer, default: 200, maximum: 1000 }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  bucket: { type: string }
+                  prefix: { type: string }
+                  truncated: { type: boolean }
+                  credential_source: { type: string, enum: [user, biomate] }
+                  entries:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        type: { type: string, enum: [prefix, object] }
+                        key: { type: string }
+                        name: { type: string }
+                        size: { type: integer }
+                        last_modified: { type: string, format: date-time }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          description: No S3 bucket configured
+
   # ── Accession resolution ────────────────────────────────────────────────────
 
   /api/accession/resolve:

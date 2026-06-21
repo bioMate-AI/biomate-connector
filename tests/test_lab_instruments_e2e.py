@@ -843,6 +843,298 @@ class TestBenchling(unittest.TestCase):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# 11. Instrument → BioMate Integration
+#
+# Tests the full notification path:
+#   scan_directory() / connector → _notify_biomate() → POST /api/instruments/new-data
+#
+# The mock server is extended below to handle /api/instruments/new-data and
+# record what payload was sent.  No real BioMate instance is required.
+# ──────────────────────────────────────────────────────────────────────────────
+
+# Shared list that _MockHandler stores captured /api/instruments/new-data POSTs into
+_BIOMATE_NOTIFICATIONS: list = []
+
+
+class _ExtendedMockHandler(_MockHandler):
+    """Extends _MockHandler with /api/instruments/new-data capture."""
+
+    def do_POST(self):
+        p = self.path.split("?")[0]
+        if p == "/api/instruments/new-data":
+            length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(length) if length else b"{}"
+            try:
+                payload = json.loads(body)
+            except json.JSONDecodeError:
+                payload = {}
+            _BIOMATE_NOTIFICATIONS.append(payload)
+            self._respond(200, json.dumps({"status": "ok"}).encode())
+            return
+        # Delegate everything else to the parent handler
+        super().do_POST()
+
+
+# Second mock server on a different port — handles BioMate instrument endpoint
+_biomate_server = HTTPServer(("127.0.0.1", 0), _ExtendedMockHandler)
+_BIOMATE_MOCK_PORT = _biomate_server.server_address[1]
+_BIOMATE_MOCK_URL = f"http://127.0.0.1:{_BIOMATE_MOCK_PORT}"
+threading.Thread(target=_biomate_server.serve_forever, daemon=True).start()
+
+
+class TestInstrumentToBioMateIntegration(unittest.TestCase):
+    """
+    End-to-end integration: instrument connector produces data event →
+    _notify_biomate() POSTs to BioMate → payload shape verified.
+
+    No real hardware, no real BioMate server.
+    """
+
+    def setUp(self):
+        # Clear captured notifications before each test
+        _BIOMATE_NOTIFICATIONS.clear()
+
+        # Redirect instrument_watcher module-level URL to our mock BioMate server
+        import lab_instruments.instrument_watcher as iw
+        self._orig_url = iw.BIOMATE_API_URL
+        iw.BIOMATE_API_URL = _BIOMATE_MOCK_URL
+
+    def tearDown(self):
+        import lab_instruments.instrument_watcher as iw
+        iw.BIOMATE_API_URL = self._orig_url
+        _BIOMATE_NOTIFICATIONS.clear()
+
+    # ── scan_directory → _notify_biomate ──────────────────────────────────────
+
+    def test_cryoem_mrc_files_trigger_notification(self):
+        """CryoEM .mrc files above min_movies threshold → notify BioMate."""
+        from lab_instruments.instrument_watcher import WatchedDirectory, scan_directory, _notify_biomate
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            for i in range(15):
+                (Path(tmpdir) / f"FoilHole_{i:04d}.mrc").touch()
+
+            watched = WatchedDirectory(path=tmpdir, settle_seconds=0)
+            event = scan_directory(watched)
+
+        self.assertIsNotNone(event, "scan_directory should return event for 15 .mrc files")
+        self.assertEqual(event["workflow_id"], "cryosparc_standard_spa")
+        self.assertEqual(event["param_key"], "movies_path")
+
+        # Now actually notify BioMate and verify the HTTP call landed
+        ok = _notify_biomate(event)
+        self.assertTrue(ok, "_notify_biomate returned False")
+        self.assertEqual(len(_BIOMATE_NOTIFICATIONS), 1)
+        notif = _BIOMATE_NOTIFICATIONS[0]
+        self.assertEqual(notif["workflow_id"], "cryosparc_standard_spa")
+        self.assertEqual(notif["directory"], tmpdir)
+        self.assertGreaterEqual(notif["file_count"], 15)
+
+    def test_nanopore_pod5_files_trigger_notification(self):
+        """Nanopore .pod5 files → notify BioMate with basecalling workflow."""
+        from lab_instruments.instrument_watcher import WatchedDirectory, scan_directory, _notify_biomate
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            for i in range(3):
+                (Path(tmpdir) / f"batch_{i:04d}.pod5").touch()
+
+            watched = WatchedDirectory(path=tmpdir, settle_seconds=0)
+            event = scan_directory(watched)
+
+        self.assertIsNotNone(event)
+        self.assertEqual(event["workflow_id"], "nanopore_basecalling")
+
+        ok = _notify_biomate(event)
+        self.assertTrue(ok)
+        notif = _BIOMATE_NOTIFICATIONS[0]
+        self.assertEqual(notif["workflow_id"], "nanopore_basecalling")
+        self.assertIn("message", notif)
+
+    def test_notification_payload_has_required_fields(self):
+        """Every BioMate notification must have the 6 required fields."""
+        from lab_instruments.instrument_watcher import WatchedDirectory, scan_directory, _notify_biomate
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            (Path(tmpdir) / "run.pod5").touch()
+            watched = WatchedDirectory(path=tmpdir, settle_seconds=0)
+            event = scan_directory(watched)
+
+        self.assertIsNotNone(event)
+        _notify_biomate(event)
+        notif = _BIOMATE_NOTIFICATIONS[0]
+
+        required = {"workflow_id", "directory", "file_count", "param_key", "description", "message"}
+        for field in required:
+            self.assertIn(field, notif, f"Notification missing required field: {field}")
+            self.assertTrue(notif[field] is not None, f"Field '{field}' is None")
+
+    def test_below_threshold_does_not_notify(self):
+        """Files below min_files threshold must NOT trigger a BioMate notification."""
+        from lab_instruments.instrument_watcher import WatchedDirectory, scan_directory
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Only 1 .mrc — min_files for CryoEM is 10, so no trigger
+            (Path(tmpdir) / "movie_0000.mrc").touch()
+            watched = WatchedDirectory(path=tmpdir, settle_seconds=0)
+            event = scan_directory(watched)
+
+        self.assertIsNone(event, "Should return None when file count < min_files")
+        self.assertEqual(len(_BIOMATE_NOTIFICATIONS), 0)
+
+    def test_settle_time_suppresses_early_trigger(self):
+        """While files are still arriving (settle_seconds not elapsed), no event fires."""
+        from lab_instruments.instrument_watcher import WatchedDirectory, scan_directory
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            for i in range(15):
+                (Path(tmpdir) / f"movie_{i:04d}.mrc").touch()
+            # settle_seconds=9999 → still settling
+            watched = WatchedDirectory(path=tmpdir, settle_seconds=9999)
+            event = scan_directory(watched)
+
+        self.assertIsNone(event, "Event should not fire while still within settle window")
+
+    # ── Illumina → BioMate ───────────────────────────────────────────────────
+
+    def test_illumina_rnaseq_run_notifies_biomate(self):
+        """Illumina RNA-seq run → runs_to_biomate_inputs → correct workflow_id in event."""
+        from lab_instruments import illumina_basespace_connector as mod
+        orig = mod.BASESPACE_API_BASE
+        mod.BASESPACE_API_BASE = _MOCK_URL  # point at instrument mock server
+        from lab_instruments.instrument_watcher import _notify_biomate
+        try:
+            from lab_instruments.illumina_basespace_connector import BaseSpaceConnector
+            connector = BaseSpaceConnector(access_token="test-token")
+            runs = connector.list_runs()
+            inputs = connector.runs_to_biomate_inputs(runs)
+
+            # Find the RNA-seq run
+            rna_input = next(
+                (i for i in inputs if i["suggested_workflow"] == "rnaseq_differential"),
+                None,
+            )
+            self.assertIsNotNone(rna_input, "RNA-seq run not found in inputs")
+
+            # Build a BioMate notification event from the Illumina input
+            event = {
+                "workflow_id": rna_input["suggested_workflow"],
+                "directory": f"basespace://runs/{rna_input['basespace_run_id']}",
+                "file_count": rna_input.get("sample_count", 0),
+                "param_key": "reads",
+                "description": f"Illumina RNA-seq run: {rna_input['run_name']}",
+                "message": f"New Illumina sequencing run '{rna_input['run_name']}'. Click to run RNA-seq DE.",
+                "basespace_run_id": rna_input["basespace_run_id"],
+                "sample_ids": rna_input["sample_ids"],
+            }
+            ok = _notify_biomate(event)
+            self.assertTrue(ok)
+            notif = _BIOMATE_NOTIFICATIONS[0]
+            self.assertEqual(notif["workflow_id"], "rnaseq_differential")
+            self.assertIn("basespace_run_id", notif)
+            self.assertEqual(notif["basespace_run_id"], "run-rna-02")
+        finally:
+            mod.BASESPACE_API_BASE = orig
+
+    def test_illumina_wgs_run_routes_to_gatk_workflow(self):
+        """Illumina WGS run → notification must have workflow_id=wgs_germline_gatk."""
+        from lab_instruments import illumina_basespace_connector as mod
+        orig = mod.BASESPACE_API_BASE
+        mod.BASESPACE_API_BASE = _MOCK_URL
+        from lab_instruments.instrument_watcher import _notify_biomate
+        try:
+            from lab_instruments.illumina_basespace_connector import BaseSpaceConnector
+            connector = BaseSpaceConnector(access_token="test-token")
+            runs = connector.list_runs()
+            inputs = connector.runs_to_biomate_inputs(runs)
+
+            wgs_input = next(
+                (i for i in inputs if i["suggested_workflow"] == "wgs_germline_gatk"),
+                None,
+            )
+            self.assertIsNotNone(wgs_input, "WGS run not found in inputs")
+
+            event = {
+                "workflow_id": wgs_input["suggested_workflow"],
+                "directory": f"basespace://runs/{wgs_input['basespace_run_id']}",
+                "file_count": wgs_input.get("sample_count", 0),
+                "param_key": "input",
+                "description": f"Illumina WGS run: {wgs_input['run_name']}",
+                "message": f"New WGS run '{wgs_input['run_name']}'. Click to run GATK variant calling.",
+            }
+            ok = _notify_biomate(event)
+            self.assertTrue(ok)
+            notif = _BIOMATE_NOTIFICATIONS[0]
+            self.assertEqual(notif["workflow_id"], "wgs_germline_gatk")
+        finally:
+            mod.BASESPACE_API_BASE = orig
+
+    # ── MinKNOW → BioMate ────────────────────────────────────────────────────
+
+    def test_minknow_wgs_run_notifies_biomate(self):
+        """MinKNOW WGS run (SQK-LSK kit) → notification with wgs_nanopore_variant_call."""
+        from lab_instruments.instrument_watcher import _notify_biomate
+        from lab_instruments.nanopore_minknow_connector import MinKNOWConnector
+
+        connector = MinKNOWConnector(host="127.0.0.1", port=_MOCK_PORT)
+        runs = connector.detect_completed_runs()
+        self.assertEqual(len(runs), 1)
+
+        run = runs[0]
+        run["output_path"] = ""  # avoid real FS lookup
+        params = connector.run_to_biomate_params(run)
+
+        event = {
+            "workflow_id": params["suggested_workflow"],
+            "directory": params.get("input_path", ""),
+            "file_count": 1,
+            "param_key": "input_path",
+            "description": f"MinKNOW run: {run['experiment_name']}",
+            "message": f"Nanopore WGS run complete. Click to run {params['suggested_workflow']}.",
+            "run_id": run["run_id"],
+            "sample_id": run["sample_id"],
+        }
+        ok = _notify_biomate(event)
+        self.assertTrue(ok)
+        notif = _BIOMATE_NOTIFICATIONS[0]
+        self.assertEqual(notif["workflow_id"], "wgs_nanopore_variant_call")
+        self.assertIn("sample_id", notif)
+        self.assertEqual(notif["sample_id"], "NA12878")
+
+    # ── CryoEM EPU → BioMate ─────────────────────────────────────────────────
+
+    def test_cryoem_epu_session_notifies_biomate(self):
+        """EPU completed session → session_to_biomate_params → correct cryosparc notification."""
+        from lab_instruments.instrument_watcher import _notify_biomate
+        from lab_instruments.cryoem_instrument_connector import EPUConnector
+
+        connector = EPUConnector(host="127.0.0.1", port=_MOCK_PORT)
+        completed = connector.detect_completed_sessions()
+        self.assertEqual(len(completed), 1)
+        params = connector.session_to_biomate_params(completed[0])
+
+        event = {
+            "workflow_id": params["suggested_workflow"],
+            "directory": params.get("movies_path", ""),
+            "file_count": params.get("movie_count", 0),
+            "param_key": "movies_path",
+            "description": f"CryoEM session: {completed[0]['session_name']}",
+            "message": (
+                f"EPU session '{completed[0]['session_name']}' complete "
+                f"({params.get('movie_count', 0)} movies). Click to run CryoSPARC SPA."
+            ),
+            "session_id": completed[0]["session_id"],
+            "voltage": params.get("voltage"),
+            "pixel_size": params.get("pixel_size"),
+        }
+        ok = _notify_biomate(event)
+        self.assertTrue(ok)
+        notif = _BIOMATE_NOTIFICATIONS[0]
+        self.assertEqual(notif["workflow_id"], "cryosparc_standard_spa")
+        self.assertEqual(notif["session_id"], "sess-001")
+        self.assertEqual(notif["file_count"], 2480)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Summary runner
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -867,6 +1159,7 @@ if __name__ == "__main__":
         TestPlateReaderSmoke,
         TestSiLA2,
         TestBenchling,
+        TestInstrumentToBioMateIntegration,
     ]:
         suite.addTests(loader.loadTestsFromTestCase(cls))
 
