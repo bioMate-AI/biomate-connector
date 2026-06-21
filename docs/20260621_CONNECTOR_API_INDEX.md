@@ -1,6 +1,6 @@
 # BioMate Connector — API & Coverage Index
 **Date:** 2026-06-21  
-**Branch:** connectors/integrations  
+**Branch:** `main` (`github.com/bioMate-AI/biomate-connector`)  
 **Source:** Derived from `connectors/openapi-biomate-api.yaml`, `mcp/tools_manifest.py`, `frontend/server/routes.ts`, `backend/lib/galaxy/webapps/galaxy/api/nextflow_executor.py`
 
 ---
@@ -12,11 +12,13 @@
 | Connector | Surface | Test file | Tests | Type |
 |-----------|---------|-----------|-------|------|
 | Claude Code / Desktop / Cursor / Codex | MCP stdio (live) | `tests/test_mcp_e2e.py` | 2 | Live post-sync |
-| Claude Code / Desktop / Cursor / Codex | MCP protocol + tool schemas | `tests/test_connector_sandbox.py` | 29 | Offline/unit |
+| Claude Code / Desktop / Cursor / Codex | MCP protocol + tool schemas | `tests/test_connector_sandbox.py` | 45 | Offline/unit |
 | ChatGPT GPT Actions | OpenAPI 3.1 + OAuth | `tests/test_chatgpt_connector.py` | 16 | Unit + live |
-| Slack | Slash commands, signature verify, block builders | `tests/test_slack_bot.py` | 33 | Unit |
-| WeChat / Open Claw | Query, message handling | `tests/test_wechat_open_claw.py` | 11 | Unit |
+| Slack | Slash commands, signature verify, block builders, history, streaming | `tests/test_slack_bot.py` | 33 | Unit |
+| WeChat / Open Claw | Query, message handling, `/connect` linking | `tests/test_wechat_open_claw.py` | 11 | Unit |
 | Coze (ByteDance) | Plugin schema + tool dispatch | `tests/test_coze_plugin.py` | 18 | Unit |
+| Feishu (Lark) | Event webhook, dedup, auto-login `/go` redirect, HMAC, multi-turn | `tests/test_feishu_bot.py` | 30 | Unit |
+| Telegram | Update parsing, handler dispatch, 4096-char split, inline keyboard | `tests/test_telegram_bot.py` | 17 | Unit |
 | Tool manifest | Schema validity, lite set, Anthropic/OpenAI SDK shape | `tests/test_tools_manifest.py` | 22 | Unit |
 | OAuth 2.1 server | PKCE flow, code exchange, refresh rotation | `tests/test_oauth_server.py` | 7 | Integration |
 | OAuth 2.1 security | Cross-surface token rejection, scope widening, rate limits, reuse detection | `tests/test_oauth_security.py` | 10 | Security |
@@ -43,7 +45,7 @@
 |------|-----------|-------|
 | Instrument file scan → `_notify_biomate()` → `POST /api/instruments/new-data` | `TestInstrumentToBioMateIntegration` | 9 |
 
-**Total automated tests: 222**  
+**Total automated tests: 306**  
 Three smoke-only connectors (Flow Cytometer, qPCR, Plate Reader) require fixture files to run fully; they skip gracefully without them.
 
 ---
@@ -67,6 +69,7 @@ Base URLs: `https://app.biomate.ai` · `http://localhost:5000`
 | `POST` | `/api/auth/login` | Login — returns JWT + sets `biomate_token` cookie. `rememberMe=true` → 30-day cookie |
 | `POST` | `/api/auth/logout` | Logout — clears cookie |
 | `GET` | `/api/auth/me` | Get current authenticated user |
+| `POST` | `/api/auth/login-token` | Mint a single-use, ~5-min auto-login token — `Bearer <api_key>` auth; returns `{token}`. Used by the Feishu `/connect/feishu/go` route to generate a fresh one-time magic link at click time |
 
 ### Agentic Session (Open Claw)
 
@@ -517,6 +520,63 @@ POST   /api/invocations/{invocation_id}/autoloop-dismiss
 GET    /api/rationale/{rationale_id:path}
 GET    /api/admin/index-health
 ```
+
+---
+
+## 4. Feishu Connector — Self-Hosted Bot Routes
+
+The Feishu connector runs as a separate Flask app (`connectors/feishu/feishu_bot.py`) deployed by the customer on their own host. It exposes three HTTP routes of its own and calls back into the BioMate public API.
+
+**Self-host deploy:** `connectors/feishu/` contains a complete Docker + Caddy package (`docker-compose.yml`, `Dockerfile`, `Caddyfile`). One `docker compose up -d --build` gives automatic HTTPS and the bot running on port 8093 behind Caddy on port 443.
+
+### Feishu bot routes (served by the customer's host)
+
+| Method | Path | Summary |
+|--------|------|---------|
+| `POST` | `/connect/feishu/webhook` | Feishu event subscription endpoint. Handles `url_verification` challenge (echo `challenge` field) and `im.message.receive_v1` events. HMAC-verified via `FEISHU_VERIFY_TOKEN`. Encrypt-mode not supported — keep Encrypt Key disabled in the Feishu app console. |
+| `GET` | `/connect/feishu/go` | **Click-time auto-login redirect.** The "Open in BioMate" card button points here. Verifies HMAC signature (`sig`, `exp`, `u`, `r` query params), mints a fresh one-time login token via `POST /api/auth/login-token`, then 302s the user into BioMate already logged-in. Minting at click time (not card-send time) means IM link previews and slow clicks cannot burn/expire the token. Falls back to app root if signature invalid or user not bound. |
+| `GET` | `/connect/feishu/health` | Health probe — returns `{"status":"ok","service":"biomate-feishu"}` |
+
+### Feishu authentication + binding flow
+
+```
+User in Feishu DM: "bind <biomate_api_key>"
+  → feishu_bot stores {open_id: api_key} in _user_bindings (in-memory; Redis for multi-worker)
+
+User sends scientific query
+  → feishu_bot calls POST /api/chat/stream (Bearer = bound api_key)
+  → SSE parsed; reply_text + workflow_name + view_url extracted
+  → send_text_message(chat_id, reply_text)
+  → send_workflow_card(chat_id, workflow_name, url=signed /go link)
+
+User taps "Open in BioMate" card button
+  → GET /connect/feishu/go?u=<open_id>&r=<path>&exp=<ts>&sig=<hmac>
+  → bot verifies HMAC (sha256, CONNECTOR_SIGNING_SECRET || FEISHU_APP_SECRET)
+  → POST /api/auth/login-token → one-time token
+  → 302 → /api/auth/magic?token=<ott>&redirect=<path>
+  → user lands in BioMate, already logged in, on the exact workflow page
+```
+
+### Feishu env vars
+
+| Variable | Required | Purpose |
+|----------|----------|---------|
+| `FEISHU_APP_ID` | Yes | Feishu app ID |
+| `FEISHU_APP_SECRET` | Yes | Feishu app secret (also HMAC signing key fallback) |
+| `FEISHU_VERIFY_TOKEN` | Yes | Event subscription verification token |
+| `FEISHU_BASE` | No | `https://open.feishu.cn` (default) or `https://open.larksuite.com` for Lark international |
+| `BIOMATE_API_URL` | Yes | BioMate backend URL (`https://app.biomate.ai`) |
+| `BIOMATE_DEEP_LINK_BASE` | Yes | App root for fallback links |
+| `CONNECTOR_PUBLIC_URL` | Yes | This bot's HTTPS base — needed for `/go` links; omitting it silently falls back to bare deep links |
+| `CONNECTOR_SIGNING_SECRET` | Recommended | Dedicated HMAC key for `/go` link signing (falls back to `FEISHU_APP_SECRET` if not set) |
+
+### Feishu dedup + security notes
+
+- **Event dedup:** `_already_seen(message_id)` tracks a rolling 2048-entry deque. Feishu retries events on non-2xx; the bot returns 200 immediately for all valid events and handles them asynchronously so retries are harmless.
+- **HMAC `/go` link:** signed with `sha256(open_id + "\n" + redirect_path + "\n" + exp)`. The `exp` field is a Unix timestamp; links self-expire after 3600s by default.
+- **Tenant token caching:** `get_tenant_access_token()` caches the token with a 60s safety margin before expiry; refreshes automatically on next use.
+- **In-memory state:** `_user_bindings` and `_conversation_history` are in-memory. A restart drops bindings and history (users just `bind` again). Scale to multiple workers by moving these to Redis.
+- **Encrypt mode:** not implemented — keep Encrypt Key disabled in the Feishu app console.
 
 ---
 
