@@ -1,0 +1,43 @@
+# BioMate Feishu/Lark connector — self-host stack.
+#   feishu-bot : the Flask bot (gunicorn), internal :8093
+#   caddy      : TLS terminator + reverse proxy, auto Let's Encrypt cert
+#
+# Quick start:
+#   cp .env.example .env   # fill in, set CONNECTOR_DOMAIN to your DNS name
+#   docker compose up -d --build
+# Then register the Feishu event URL + the magic /go host (see DEPLOY.md).
+
+services:
+  feishu-bot:
+    build: .
+    image: biomate-feishu-bot
+    container_name: biomate-feishu-bot
+    env_file: .env
+    expose:
+      - "8093"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8093/connect/feishu/health').status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  caddy:
+    image: caddy:2
+    container_name: biomate-feishu-caddy
+    depends_on: [feishu-bot]
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - CONNECTOR_DOMAIN=${CONNECTOR_DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:
