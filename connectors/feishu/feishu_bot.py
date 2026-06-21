@@ -26,6 +26,8 @@ API reference:
     https://open.feishu.cn/document/server-docs/im-v1/message/create
 """
 
+import hashlib
+import hmac
 import json
 import logging
 import os
@@ -34,7 +36,7 @@ import threading
 import time
 from collections import deque
 from typing import Any, Deque, Dict, List, Optional, Tuple
-from urllib.parse import quote, urlparse
+from urllib.parse import quote, urlencode, urlparse
 
 import requests
 
@@ -47,6 +49,17 @@ FEISHU_BASE = os.environ.get("FEISHU_BASE", "https://open.feishu.cn")  # Lark: h
 BIOMATE_API_URL = os.environ.get("BIOMATE_API_URL", "http://localhost:5000")
 BIOMATE_API_KEY = os.environ.get("BIOMATE_API_KEY", "")
 BIOMATE_DEEP_LINK_BASE = os.environ.get("BIOMATE_DEEP_LINK_BASE", "https://app.biomate.ai")
+
+# Public HTTPS base of THIS bot (e.g. https://connect.example.com). When set,
+# workflow-card buttons point at the bot's own /connect/feishu/go redirect so a
+# fresh one-time login token is minted at click time (avoids the single-use
+# token being expired or pre-consumed by IM link previews). Falls back to a
+# baked magic link / bare deep link when unset.
+CONNECTOR_PUBLIC_URL = os.environ.get("CONNECTOR_PUBLIC_URL", "")
+# Secret for HMAC-signing /go links so nobody can forge an auto-login URL for an
+# arbitrary open_id. Dedicated env, else the always-present app secret.
+_GO_SIGNING_SECRET = os.environ.get("CONNECTOR_SIGNING_SECRET", "") or FEISHU_APP_SECRET
+_GO_LINK_TTL = 3600  # seconds a /go link stays valid
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -344,32 +357,38 @@ def _open_claw_query(
     return reply_text, workflow_id, view_url
 
 
-def _build_magic_link(
+def _redirect_path_from_view_url(view_url: Optional[str]) -> str:
+    """Path (+query) to redirect to after auto-login; app home if no view_url."""
+    if not view_url:
+        return "/"
+    parsed = urlparse(view_url)
+    path = parsed.path or "/"
+    if parsed.query:
+        path += "?" + parsed.query
+    return path
+
+
+def _mint_magic_for_path(
     api_key: Optional[str],
-    view_url: Optional[str],
+    redirect_path: str,
     _base_url_override: Optional[str] = None,
 ) -> Optional[str]:
     """
-    Wrap a server-provided view_url in a one-time auto-login link so the bound
-    user lands logged-in on the workflow instead of the login page.
+    Mint a one-time auto-login link to `redirect_path` (no long-lived secret in
+    the URL):
+      1. POST /api/auth/login-token (Bearer = bound api_key) → single-use,
+         ~5-min token.
+      2. Build …/api/auth/magic?token=<ott>&redirect=<path> — opening it sets the
+         session cookie then 302s to the destination.
 
-    Flow (no long-lived secret ever in the URL):
-      1. POST /api/auth/login-token  (Bearer = the user's bound BioMate api_key)
-         → a single-use, ~5-min login token.
-      2. Build  …/api/auth/magic?token=<ott>&redirect=<view_url path>  — opening
-         it sets the session cookie then 302s to the workflow.
-
-    Returns the magic URL, or None on any failure (caller falls back to the bare
-    view_url). Requires both a bound api_key and a server-provided view_url.
+    NOTE: the token is single-use + short-lived, so mint it at CLICK time (via
+    the /connect/feishu/go route), not when the card is sent — otherwise an IM
+    link preview or a slow click burns/expires it. Returns None on any failure.
     """
-    if not api_key or not view_url:
+    if not api_key:
         return None
     api_base = (_base_url_override or BIOMATE_API_URL).rstrip("/")
     try:
-        parsed = urlparse(view_url)
-        redirect_path = parsed.path or "/"
-        if parsed.query:
-            redirect_path += "?" + parsed.query
         resp = requests.post(
             f"{api_base}/api/auth/login-token",
             headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
@@ -377,7 +396,7 @@ def _build_magic_link(
             timeout=10,
         )
         if resp.status_code != 200:
-            log.warning(f"login-token failed ({resp.status_code}); using bare view_url")
+            log.warning(f"login-token failed ({resp.status_code})")
             return None
         ott = (resp.json() or {}).get("token")
         if not ott:
@@ -387,8 +406,56 @@ def _build_magic_link(
             f"?token={quote(ott, safe='')}&redirect={quote(redirect_path, safe='')}"
         )
     except Exception as exc:
-        log.warning(f"magic link build failed: {exc}")
+        log.warning(f"magic link mint failed: {exc}")
         return None
+
+
+def _build_magic_link(
+    api_key: Optional[str],
+    view_url: Optional[str],
+    _base_url_override: Optional[str] = None,
+) -> Optional[str]:
+    """Bake a magic link now (fragile for IM — prefer the /go redirect)."""
+    if not api_key:
+        return None
+    return _mint_magic_for_path(
+        api_key, _redirect_path_from_view_url(view_url), _base_url_override=_base_url_override
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Click-time auto-login redirect (/connect/feishu/go)
+# ──────────────────────────────────────────────────────────────────────────────
+# The card button points at the bot's own /go route rather than baking a token.
+# At the moment of the real click the bot mints a FRESH one-time token — so a
+# link-preview prefetch or a slow click can never hand the user a dead token.
+# The /go URL is HMAC-signed (open_id + redirect + expiry) so nobody can forge an
+# auto-login link for an arbitrary user, and it self-expires.
+
+def _sign_go(open_id: str, redirect_path: str, exp: int) -> str:
+    msg = f"{open_id}\n{redirect_path}\n{exp}".encode("utf-8")
+    return hmac.new(_GO_SIGNING_SECRET.encode("utf-8"), msg, hashlib.sha256).hexdigest()
+
+
+def _signed_go_url(open_id: str, redirect_path: str = "/", ttl: int = _GO_LINK_TTL) -> Optional[str]:
+    """Build a signed, self-expiring link to the bot's /go route. None if no public URL."""
+    if not CONNECTOR_PUBLIC_URL or not open_id:
+        return None
+    exp = int(time.time()) + ttl
+    sig = _sign_go(open_id, redirect_path, exp)
+    qs = urlencode({"u": open_id, "r": redirect_path, "exp": exp, "sig": sig})
+    return f"{CONNECTOR_PUBLIC_URL.rstrip('/')}/connect/feishu/go?{qs}"
+
+
+def _verify_go(open_id: str, redirect_path: str, exp: str, sig: str) -> bool:
+    try:
+        exp_i = int(exp)
+    except (TypeError, ValueError):
+        return False
+    if exp_i < int(time.time()):
+        return False
+    expected = _sign_go(open_id, redirect_path, exp_i)
+    return hmac.compare_digest(expected, sig or "")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -520,13 +587,16 @@ def handle_message_event(event: Dict[str, Any], _base_url_override: Optional[str
     send_text_message(chat_id, reply_text, _base_url_override=_base_url_override)
 
     # Build the "Open in BioMate" button target, in order of preference:
-    #   1. magic auto-login link wrapping view_url (bound user → lands logged-in
-    #      on the generated workflow)
-    #   2. bare view_url (deep-links to the workflow, but may hit the login page)
-    #   3. the app root (no addressable workflow)
+    #   1. signed /go redirect (bound user + public bot URL) → mints a FRESH
+    #      one-time login token at click time, so previews/slow clicks can't kill it
+    #   2. baked magic link (bound user, no public URL — e.g. local testing)
+    #   3. bare view_url (deep-links to the workflow, but may hit the login page)
+    #   4. the app root
     if workflow_id:
+        redirect_path = _redirect_path_from_view_url(view_url)
         url = (
-            _build_magic_link(user_api_key, view_url, _base_url_override=_base_url_override)
+            (_signed_go_url(open_id, redirect_path) if user_api_key else None)
+            or _build_magic_link(user_api_key, view_url, _base_url_override=_base_url_override)
             or view_url
             or BIOMATE_DEEP_LINK_BASE
         )
@@ -584,7 +654,7 @@ def create_flask_app():
     NOTE: encrypt-mode decryption is NOT implemented. Disable the Encrypt Key in
     the Feishu console, or add a WBizMsgCrypt-equivalent decrypt step here.
     """
-    from flask import Flask, request, jsonify
+    from flask import Flask, request, jsonify, redirect
 
     app = Flask("biomate-feishu")
 
@@ -596,6 +666,25 @@ def create_flask_app():
                       "implemented — disable Encrypt Key in the app console.")
             return jsonify({}), 200
         return jsonify(handle_event(body))
+
+    @app.route("/connect/feishu/go", methods=["GET"])
+    def feishu_go():
+        """
+        Click-time auto-login redirect. Verifies the signed link, mints a FRESH
+        one-time login token for the bound user, then 302s into BioMate already
+        logged-in. Falls back to the app root (login page) if anything is off.
+        """
+        open_id = request.args.get("u", "")
+        redirect_path = request.args.get("r", "/")
+        if not _verify_go(open_id, redirect_path, request.args.get("exp", ""),
+                          request.args.get("sig", "")):
+            log.warning("feishu /go: bad or expired signature")
+            return redirect(BIOMATE_DEEP_LINK_BASE, code=302)
+        api_key = _user_bindings.get(open_id)
+        if not api_key:
+            return redirect(BIOMATE_DEEP_LINK_BASE, code=302)
+        magic = _mint_magic_for_path(api_key, redirect_path)
+        return redirect(magic or BIOMATE_DEEP_LINK_BASE, code=302)
 
     @app.route("/connect/feishu/health", methods=["GET"])
     def health():
