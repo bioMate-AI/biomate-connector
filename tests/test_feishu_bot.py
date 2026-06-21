@@ -34,6 +34,9 @@ from feishu_bot import (
     handle_message_event,
     _already_seen,
     _seen_message_ids,
+    _sign_go,
+    _signed_go_url,
+    _verify_go,
 )
 
 
@@ -327,6 +330,105 @@ class TestHandleMessageEvent(unittest.TestCase):
         self.assertEqual(len(cards), 1)
         self.assertEqual(cards[0]["workflow_name"], "predict_admet_properties")
         self.assertEqual(cards[0]["url"], feishu_bot.BIOMATE_DEEP_LINK_BASE)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Tests: signed /go click-time auto-login redirect
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestGoRedirect(unittest.TestCase):
+
+    def setUp(self):
+        feishu_bot._user_bindings.clear()
+
+    # ── signing helpers ───────────────────────────────────────────────────────
+
+    def test_signed_go_url_none_without_public_url(self):
+        with patch("feishu_bot.CONNECTOR_PUBLIC_URL", ""):
+            self.assertIsNone(_signed_go_url("ou_1", "/"))
+
+    def test_signed_go_url_is_signed_and_verifies(self):
+        with patch("feishu_bot.CONNECTOR_PUBLIC_URL", "https://bot.example.com"):
+            url = _signed_go_url("ou_1", "/workflow/abc")
+        self.assertIn("https://bot.example.com/connect/feishu/go?", url)
+        from urllib.parse import urlparse, parse_qs
+        q = parse_qs(urlparse(url).query)
+        self.assertTrue(_verify_go(q["u"][0], q["r"][0], q["exp"][0], q["sig"][0]))
+
+    def test_verify_rejects_tampered_open_id(self):
+        exp = int(feishu_bot.time.time()) + 600
+        sig = _sign_go("ou_real", "/", exp)
+        self.assertFalse(_verify_go("ou_attacker", "/", str(exp), sig))  # forged target
+
+    def test_verify_rejects_expired(self):
+        exp = int(feishu_bot.time.time()) - 10
+        sig = _sign_go("ou_1", "/", exp)
+        self.assertFalse(_verify_go("ou_1", "/", str(exp), sig))
+
+    def test_verify_rejects_bad_sig(self):
+        exp = int(feishu_bot.time.time()) + 600
+        self.assertFalse(_verify_go("ou_1", "/", str(exp), "deadbeef"))
+
+    # ── the Flask /go route ───────────────────────────────────────────────────
+
+    def _client(self):
+        return feishu_bot.create_flask_app().test_client()
+
+    def test_go_valid_bound_mints_fresh_and_redirects(self):
+        feishu_bot._user_bindings["ou_1"] = "key-abc"
+        with patch("feishu_bot.CONNECTOR_PUBLIC_URL", "https://bot.example.com"), \
+             patch("feishu_bot._mint_magic_for_path",
+                   return_value="https://api.biomate/auth/magic?token=FRESH&redirect=%2F") as mint:
+            url = _signed_go_url("ou_1", "/")
+            from urllib.parse import urlparse
+            path_q = urlparse(url).path + "?" + urlparse(url).query
+            resp = self._client().get(path_q)
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(resp.headers["Location"], "https://api.biomate/auth/magic?token=FRESH&redirect=%2F")
+        mint.assert_called_once_with("key-abc", "/")  # minted at click time
+
+    def test_go_bad_signature_redirects_to_app_root(self):
+        with patch("feishu_bot.BIOMATE_DEEP_LINK_BASE", "https://app.biomate.ai"):
+            resp = self._client().get("/connect/feishu/go?u=ou_1&r=/&exp=99999999999&sig=forged")
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(resp.headers["Location"], "https://app.biomate.ai")
+
+    def test_go_valid_sig_but_unbound_redirects_to_app_root(self):
+        with patch("feishu_bot.CONNECTOR_PUBLIC_URL", "https://bot.example.com"), \
+             patch("feishu_bot.BIOMATE_DEEP_LINK_BASE", "https://app.biomate.ai"):
+            url = _signed_go_url("ou_unbound", "/")
+            from urllib.parse import urlparse
+            path_q = urlparse(url).path + "?" + urlparse(url).query
+            resp = self._client().get(path_q)  # no binding for ou_unbound
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(resp.headers["Location"], "https://app.biomate.ai")
+
+    # ── card uses /go link when bound + public URL set ────────────────────────
+
+    def test_card_uses_go_link_when_bound_and_public_url(self):
+        feishu_bot._conversation_history.clear()
+        _seen_message_ids.clear()
+        feishu_bot._user_bindings["ou_card"] = "key-xyz"
+        cards = []
+        events = [
+            ("delta", {"text": "Found workflow."}),
+            ("workflow_ready", {"workflow_name": "wf"}),
+            ("done", {}),
+        ]
+        event = {
+            "message": {"message_id": "om_go_card", "chat_id": "oc_x", "message_type": "text",
+                        "content": json.dumps({"text": "run wf"})},
+            "sender": {"sender_id": {"open_id": "ou_card"}},
+        }
+        with MockSSEServer(events=events) as srv:
+            with patch("feishu_bot.CONNECTOR_PUBLIC_URL", "https://bot.example.com"), \
+                 patch("feishu_bot.send_text_message", return_value=True), \
+                 patch("feishu_bot.send_workflow_card",
+                       side_effect=lambda cid, **k: cards.append(k) or True):
+                handle_message_event(event, _base_url_override=srv.base_url)
+
+        self.assertEqual(len(cards), 1)
+        self.assertIn("https://bot.example.com/connect/feishu/go?", cards[0]["url"])
 
 
 if __name__ == "__main__":
