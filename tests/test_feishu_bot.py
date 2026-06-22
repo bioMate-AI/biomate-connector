@@ -37,6 +37,9 @@ from feishu_bot import (
     _sign_go,
     _signed_go_url,
     _verify_go,
+    _sign_link,
+    _verify_link,
+    _account_link_url,
 )
 
 
@@ -309,6 +312,7 @@ class TestHandleMessageEvent(unittest.TestCase):
         self.assertEqual(len(sent), 1)  # second call deduped
 
     def test_scientific_query_sends_reply_and_card(self):
+        feishu_bot._user_bindings["ou_1"] = "key-bound"  # linked → proceeds to workflow
         sent = []
         cards = []
         events = [
@@ -329,7 +333,9 @@ class TestHandleMessageEvent(unittest.TestCase):
         self.assertTrue(any("ADMET" in t for t in sent))
         self.assertEqual(len(cards), 1)
         self.assertEqual(cards[0]["workflow_name"], "predict_admet_properties")
-        self.assertEqual(cards[0]["url"], feishu_bot.BIOMATE_DEEP_LINK_BASE)
+        # No bound key / no public bot URL → bare session deep link on the app.
+        self.assertTrue(cards[0]["url"].startswith(feishu_bot.BIOMATE_DEEP_LINK_BASE))
+        self.assertIn("?session=", cards[0]["url"])
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -429,6 +435,75 @@ class TestGoRedirect(unittest.TestCase):
 
         self.assertEqual(len(cards), 1)
         self.assertIn("https://bot.example.com/connect/feishu/go?", cards[0]["url"])
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Tests: OAuth-style account linking (/connect/feishu/link)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestAccountLink(unittest.TestCase):
+
+    def setUp(self):
+        feishu_bot._user_bindings.clear()
+
+    def _client(self):
+        return feishu_bot.create_flask_app().test_client()
+
+    def test_link_url_points_directly_at_bot_link_route(self):
+        with patch("feishu_bot.BIOMATE_DEEP_LINK_BASE", "https://app.biomate.ai"):
+            url = _account_link_url("ou_1")
+        # Direct full-page load to the bot route (NOT /login?next=, which 404s).
+        self.assertTrue(url.startswith("https://app.biomate.ai/connect/feishu/link?"))
+        self.assertIn("u=ou_1", url)
+        self.assertIn("sig=", url)
+
+    def test_sign_verify_roundtrip_and_tamper(self):
+        exp = int(feishu_bot.time.time()) + 600
+        sig = _sign_link("ou_real", exp)
+        self.assertTrue(_verify_link("ou_real", str(exp), sig))
+        self.assertFalse(_verify_link("ou_attacker", str(exp), sig))  # can't rebind to another id
+        self.assertFalse(_verify_link("ou_real", str(int(feishu_bot.time.time()) - 5),
+                                      _sign_link("ou_real", int(feishu_bot.time.time()) - 5)))  # expired
+
+    def test_link_bad_signature_rejected(self):
+        resp = self._client().get("/connect/feishu/link?u=ou_1&exp=99999999999&sig=forged")
+        self.assertEqual(resp.status_code, 403)
+
+    def test_link_no_cookie_shows_login_page(self):
+        exp = int(feishu_bot.time.time()) + 600
+        sig = _sign_link("ou_1", exp)
+        resp = self._client().get(f"/connect/feishu/link?u=ou_1&exp={exp}&sig={sig}")
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_data(as_text=True)
+        self.assertIn("/login", body)          # offers a login button
+        self.assertNotIn("ou_1", feishu_bot._user_bindings)  # not bound without a token
+
+    def test_link_with_valid_cookie_binds(self):
+        exp = int(feishu_bot.time.time()) + 600
+        sig = _sign_link("ou_1", exp)
+        client = feishu_bot.create_flask_app().test_client(use_cookies=False)
+        # _mint_magic_for_path is the "does this token work" check — stub it true.
+        with patch("feishu_bot._mint_magic_for_path", return_value="https://x/api/auth/magic?token=ok"):
+            resp = client.get(f"/connect/feishu/link?u=ou_1&exp={exp}&sig={sig}",
+                              environ_base={"HTTP_COOKIE": "biomate_token=the-jwt"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(feishu_bot._user_bindings.get("ou_1"), "the-jwt")
+
+    def test_unbound_query_sends_link_prompt_not_card(self):
+        _conversation_history.clear()
+        _seen_message_ids.clear()
+        prompts, cards = [], []
+        event = {
+            "message": {"message_id": "om_unbound", "chat_id": "oc_x", "message_type": "text",
+                        "content": json.dumps({"text": "run ADMET on aspirin"})},
+            "sender": {"sender_id": {"open_id": "ou_new"}},
+        }
+        with patch("feishu_bot.send_text_message", return_value=True), \
+             patch("feishu_bot.send_link_prompt", side_effect=lambda cid, oid, **k: prompts.append(oid) or True), \
+             patch("feishu_bot.send_workflow_card", side_effect=lambda cid, **k: cards.append(k) or True):
+            handle_message_event(event)
+        self.assertEqual(prompts, ["ou_new"])   # got the link prompt
+        self.assertEqual(cards, [])             # did NOT run / send a workflow card
 
 
 if __name__ == "__main__":

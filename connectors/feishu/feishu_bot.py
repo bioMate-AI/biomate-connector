@@ -34,6 +34,7 @@ import os
 import re
 import threading
 import time
+import uuid
 from collections import deque
 from typing import Any, Deque, Dict, List, Optional, Tuple
 from urllib.parse import quote, urlencode, urlparse
@@ -142,10 +143,12 @@ def send_workflow_card(
     url: str,
     receive_id_type: str = "chat_id",
     _base_url_override: Optional[str] = None,
+    button_text: str = "打开 BioMate 面板 / Open in BioMate",
+    title: Optional[str] = None,
 ) -> bool:
     """
-    Send an interactive card with an "Open in BioMate" button linking to `url`
-    (a server-provided view_url, or the app panel).
+    Send an interactive card with a single button linking to `url`. Used both for
+    the "Open in BioMate" workflow card and the "Link account" prompt.
     """
     try:
         token = get_tenant_access_token(_base_url_override=_base_url_override)
@@ -157,7 +160,7 @@ def send_workflow_card(
     card = {
         "config": {"wide_screen_mode": True},
         "header": {
-            "title": {"tag": "plain_text", "content": f"BioMate: {workflow_name}"},
+            "title": {"tag": "plain_text", "content": title or f"BioMate: {workflow_name}"},
             "template": "blue",
         },
         "elements": [
@@ -166,7 +169,7 @@ def send_workflow_card(
                 "actions": [
                     {
                         "tag": "button",
-                        "text": {"tag": "plain_text", "content": "打开 BioMate 面板 / Open in BioMate"},
+                        "text": {"tag": "plain_text", "content": button_text},
                         "type": "primary",
                         "url": url,
                     }
@@ -261,6 +264,7 @@ def _open_claw_query(
     api_key: Optional[str] = None,
     timeout: int = 55,
     _base_url_override: Optional[str] = None,
+    session_id: Optional[str] = None,
 ) -> Tuple[str, Optional[str], Optional[str]]:
     """
     Send a query through /api/chat/stream (BioMate's main AI endpoint).
@@ -291,6 +295,12 @@ def _open_claw_query(
     context: Dict[str, Any] = {}
     if history:
         context["priorMessages"] = history[-6:]
+    if session_id:
+        # Persist the conversation + generated workflow under this session so the
+        # card's ?session=<id> deep link reopens it in the user's browser (the
+        # backend keys persistence on sessionId + the bound user's token).
+        context["sessionId"] = session_id
+        context["memorySessionId"] = session_id
 
     payload: Dict[str, Any] = {"message": query}
     if context:
@@ -459,12 +469,83 @@ def _verify_go(open_id: str, redirect_path: str, exp: str, sig: str) -> bool:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Account linking (OAuth-style, no token pasting)
+# ──────────────────────────────────────────────────────────────────────────────
+# The bot is served on the SAME domain as BioMate (…/connect/feishu/* via the
+# reverse proxy), so after the user logs into BioMate the browser automatically
+# sends the biomate_token cookie to /connect/feishu/link — the bot reads it and
+# binds the Feishu user, no token pasting. The link carries a signed open_id so
+# nobody can bind an account to someone else's Feishu id.
+
+def _sign_link(open_id: str, exp: int) -> str:
+    msg = f"link\n{open_id}\n{exp}".encode("utf-8")
+    return hmac.new(_GO_SIGNING_SECRET.encode("utf-8"), msg, hashlib.sha256).hexdigest()
+
+
+def _verify_link(open_id: str, exp: str, sig: str) -> bool:
+    try:
+        exp_i = int(exp)
+    except (TypeError, ValueError):
+        return False
+    if exp_i < int(time.time()):
+        return False
+    return hmac.compare_digest(_sign_link(open_id, exp_i), sig or "")
+
+
+def _account_link_url(open_id: str, ttl: int = 1800) -> str:
+    """
+    Direct link to the bot's /connect/feishu/link (a FULL-page load → reverse
+    proxy → bot, NOT the SPA router). Same domain as BioMate, so the browser
+    sends the biomate_token cookie and the bot can bind. Carries a signed
+    open_id. (We deliberately do NOT route through /login?next=… because the
+    SPA client-routes `next` and 404s on this server-only path.)
+    """
+    exp = int(time.time()) + ttl
+    sig = _sign_link(open_id, exp)
+    return f"{BIOMATE_DEEP_LINK_BASE.rstrip('/')}/connect/feishu/link?" + urlencode(
+        {"u": open_id, "exp": exp, "sig": sig}
+    )
+
+
+def send_link_prompt(receive_id: str, open_id: str,
+                     receive_id_type: str = "chat_id",
+                     _base_url_override: Optional[str] = None) -> bool:
+    """Send the 'Link your BioMate account' card to an unbound user."""
+    return send_workflow_card(
+        receive_id,
+        workflow_name="",
+        url=_account_link_url(open_id),
+        receive_id_type=receive_id_type,
+        _base_url_override=_base_url_override,
+        title="绑定 BioMate 账号 / Link your BioMate account",
+        button_text="绑定账号 / Link account",
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Event parsing + message handler
 # ──────────────────────────────────────────────────────────────────────────────
 
 # Simple in-memory binding store: {open_id: biomate_api_key}
 # For production: replace with database persistence.
 _user_bindings: Dict[str, str] = {}
+
+# Per-user BioMate chat session id: {open_id: sessionId}. Passed to
+# /api/chat/stream so the conversation + generated workflow persist server-side
+# under the user's account; the card's ?session=<id> deep link reopens it.
+# In-memory like the rest — a restart starts a fresh session (acceptable).
+_user_sessions: Dict[str, str] = {}
+_sessions_lock = threading.Lock()
+
+
+def _get_session_id(open_id: str) -> str:
+    """Stable BioMate chat-session id for a Feishu user (created on first use)."""
+    with _sessions_lock:
+        sid = _user_sessions.get(open_id)
+        if not sid:
+            sid = str(uuid.uuid4())
+            _user_sessions[open_id] = sid
+        return sid
 
 # Dedup store — Feishu retries events on non-2xx, so track processed message_ids.
 _seen_message_ids: Deque[str] = deque(maxlen=2048)
@@ -578,27 +659,41 @@ def handle_message_event(event: Dict[str, Any], _base_url_override: Optional[str
         )
         return
 
-    # Scientific query → BioMate chat engine.
+    # Scientific query → BioMate chat engine. Require a linked account first so
+    # the run + results tie to the user (and the magic deep link can log them in).
     user_api_key = _user_bindings.get(open_id)
+    if not user_api_key:
+        send_text_message(
+            chat_id, "先绑定你的 BioMate 账号即可开始（点下方按钮，浏览器登录一下就好）。",
+            _base_url_override=_base_url_override,
+        )
+        send_link_prompt(chat_id, open_id, _base_url_override=_base_url_override)
+        return
+
+    # Pass a per-user sessionId so the conversation + generated workflow persist
+    # server-side and the card can deep-link the browser back to it (?session=<id>).
+    session_id = _get_session_id(open_id)
     reply_text, workflow_id, view_url = _open_claw_query(
         open_id, text, api_key=user_api_key, _base_url_override=_base_url_override,
+        session_id=session_id,
     )
 
     send_text_message(chat_id, reply_text, _base_url_override=_base_url_override)
 
     # Build the "Open in BioMate" button target, in order of preference:
-    #   1. signed /go redirect (bound user + public bot URL) → mints a FRESH
-    #      one-time login token at click time, so previews/slow clicks can't kill it
-    #   2. baked magic link (bound user, no public URL — e.g. local testing)
-    #   3. bare view_url (deep-links to the workflow, but may hit the login page)
-    #   4. the app root
+    #   1. signed /go redirect → mints a FRESH one-time login token at click time
+    #      (previews/slow clicks can't kill it) and lands on the chat session so
+    #      the user reviews the generated workflow's params, then Confirm & Run.
+    #   2. baked magic link to the session (bound user, no public bot URL)
+    #   3. server view_url, else the session deep link, else the app root.
     if workflow_id:
-        redirect_path = _redirect_path_from_view_url(view_url)
+        session_path = f"/?session={session_id}"
         url = (
-            (_signed_go_url(open_id, redirect_path) if user_api_key else None)
-            or _build_magic_link(user_api_key, view_url, _base_url_override=_base_url_override)
+            (_signed_go_url(open_id, session_path) if user_api_key else None)
+            or (_build_magic_link(user_api_key, BIOMATE_DEEP_LINK_BASE + session_path,
+                                  _base_url_override=_base_url_override) if user_api_key else None)
             or view_url
-            or BIOMATE_DEEP_LINK_BASE
+            or (BIOMATE_DEEP_LINK_BASE + session_path)
         )
         send_workflow_card(
             chat_id,
@@ -686,11 +781,60 @@ def create_flask_app():
         magic = _mint_magic_for_path(api_key, redirect_path)
         return redirect(magic or BIOMATE_DEEP_LINK_BASE, code=302)
 
+    @app.route("/connect/feishu/link", methods=["GET"])
+    def feishu_link():
+        """
+        Account-linking landing. Reached after the user logs into BioMate (via
+        /login?next=…). Same domain → the browser sends the biomate_token cookie;
+        we verify the signed open_id, confirm the token works, then bind. No
+        token pasting.
+        """
+        open_id = request.args.get("u", "")
+        if not _verify_link(open_id, request.args.get("exp", ""), request.args.get("sig", "")):
+            return _link_page("链接无效或已过期，请回飞书重新点「绑定账号」。",
+                              "Link invalid or expired — tap Link account again in Feishu."), 403
+        token = request.cookies.get("biomate_token", "")
+        if not token:
+            # Not logged in → show a login button. (We can't auto-return via
+            # /login?next= because the SPA client-routes `next` and 404s on this
+            # server path, so the user logs in then taps the Feishu button again.)
+            login_url = f"{BIOMATE_DEEP_LINK_BASE.rstrip('/')}/login"
+            return _link_page(
+                "请先登录 BioMate，然后回飞书再点一次「绑定账号」。",
+                "Log in to BioMate, then tap Link account again in Feishu.",
+                button=(login_url, "登录 BioMate / Log in"),
+            )
+        # Confirm the token actually authenticates before binding.
+        if not _mint_magic_for_path(token, "/"):
+            return _link_page("登录态无效，请重新登录后再点绑定。",
+                              "Session invalid — log in again then retry."), 401
+        _user_bindings[open_id] = token
+        log.warning(f"Feishu account linked for open_id={open_id[:8]}…")
+        return _link_page("✅ 绑定成功！回飞书继续，直接发你的分析请求即可。",
+                          "Linked! Return to Feishu and send your analysis request.")
+
     @app.route("/connect/feishu/health", methods=["GET"])
     def health():
         return jsonify({"status": "ok", "service": "biomate-feishu"})
 
     return app
+
+
+def _link_page(zh: str, en: str, button: Optional[Tuple[str, str]] = None) -> str:
+    btn = ""
+    if button:
+        href, label = button
+        btn = (f"<a href='{href}' style='display:inline-block;margin-top:1.2rem;"
+               "padding:.7rem 1.6rem;background:#3370ff;color:#fff;border-radius:8px;"
+               f"text-decoration:none;font-weight:600'>{label}</a>")
+    return (
+        "<!doctype html><meta charset='utf-8'>"
+        "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+        "<div style='font-family:-apple-system,sans-serif;max-width:30rem;margin:18vh auto;"
+        "text-align:center;padding:0 1.5rem;color:#1f2329'>"
+        f"<h2 style='font-weight:600'>{zh}</h2>"
+        f"<p style='color:#646a73'>{en}</p>{btn}</div>"
+    )
 
 
 if __name__ == "__main__":
