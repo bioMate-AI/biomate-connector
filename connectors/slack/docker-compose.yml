@@ -1,0 +1,47 @@
+# BioMate Slack connector — self-host stack.
+#   slack-bot : the Flask bot (gunicorn), internal :8090
+#   caddy     : TLS terminator + reverse proxy, auto Let's Encrypt cert
+#
+# Quick start (with a domain):
+#   cp .env.example .env   # fill in, set CONNECTOR_DOMAIN to your DNS name
+#   docker compose up -d --build
+# Then set the Slack slash-command Request URL to
+#   https://<CONNECTOR_DOMAIN>/integrations/slack/command  (see DEPLOY.md).
+#
+# No domain? Skip the caddy service and expose the bot with ngrok instead —
+# see DEPLOY.md "Option B".
+
+services:
+  slack-bot:
+    build: .
+    image: biomate-slack-bot
+    container_name: biomate-slack-bot
+    env_file: .env
+    expose:
+      - "8090"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8090/integrations/slack/health').status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  caddy:
+    image: caddy:2
+    container_name: biomate-slack-caddy
+    depends_on: [slack-bot]
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - CONNECTOR_DOMAIN=${CONNECTOR_DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:
