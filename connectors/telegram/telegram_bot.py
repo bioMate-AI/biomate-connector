@@ -21,6 +21,7 @@ API reference:
     https://core.telegram.org/bots/api
 """
 
+import hmac
 import json
 import logging
 import os
@@ -33,6 +34,13 @@ import requests
 log = logging.getLogger(__name__)
 
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+# Optional shared secret. When set, it is passed to Telegram's setWebhook
+# `secret_token` param; Telegram then echoes it back in the
+# `X-Telegram-Bot-Api-Secret-Token` header on every update. We reject any update
+# whose header doesn't match, so spoofed POSTs to the public webhook URL can't
+# inject fake messages. Left empty → no verification (back-compat for existing
+# deploys), but a warning is logged once so the gap is visible.
+TELEGRAM_WEBHOOK_SECRET = os.environ.get("TELEGRAM_WEBHOOK_SECRET", "")
 BIOMATE_API_URL = os.environ.get("BIOMATE_API_URL", "http://localhost:5000")
 BIOMATE_API_KEY = os.environ.get("BIOMATE_API_KEY", "")
 BIOMATE_DEEP_LINK_BASE = os.environ.get("BIOMATE_DEEP_LINK_BASE", "https://app.biomate.ai")
@@ -386,6 +394,22 @@ def handle_update(update: Dict[str, Any]) -> None:
 # Flask app (standalone deployment)
 # ──────────────────────────────────────────────────────────────────────────────
 
+def verify_webhook_secret(header_value: Optional[str]) -> bool:
+    """
+    Validate the `X-Telegram-Bot-Api-Secret-Token` header against the configured
+    secret. Returns True (allow) when no secret is configured — back-compat — and
+    otherwise requires a constant-time match. A missing header with a secret set
+    is a reject.
+    """
+    if not TELEGRAM_WEBHOOK_SECRET:
+        log.warning(
+            "TELEGRAM_WEBHOOK_SECRET not set — webhook accepts unauthenticated "
+            "updates; set it (and pass secret_token to setWebhook) to lock this down"
+        )
+        return True
+    return hmac.compare_digest(header_value or "", TELEGRAM_WEBHOOK_SECRET)
+
+
 def create_flask_app():
     """
     Minimal Flask app for the Telegram webhook.
@@ -403,6 +427,10 @@ def create_flask_app():
         if not TELEGRAM_BOT_TOKEN:
             log.error("TELEGRAM_BOT_TOKEN not set — refusing Telegram update")
             return jsonify({"ok": False, "error": "not configured"}), 503
+
+        if not verify_webhook_secret(request.headers.get("X-Telegram-Bot-Api-Secret-Token")):
+            log.warning("Telegram webhook secret-token mismatch — rejecting update")
+            return jsonify({"ok": False, "error": "forbidden"}), 403
 
         update = request.get_json(silent=True) or {}
 

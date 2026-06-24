@@ -102,22 +102,104 @@ def test_claude_picks_biomate_session():
 # Routing test matrix — different user intents must route to different tools.
 # This validates the tool descriptions actually distinguish the surface, not
 # just that the agentic biomate_session is irresistible for everything.
+#
+# Coverage: biomate_session is exercised by the smoke test above; the 16 cases
+# below cover the remaining 16 tools, so the matrix proves all 17 tools are
+# individually reachable from a plain-English prompt. Prompts mirror the L4
+# routing table in docs/20260621_TEST_PLAN.md, sharpened slightly so intent is
+# unambiguous (each names the primitive operation, not "run a workflow").
 ROUTING_CASES = [
     pytest.param(
         "What workflows do you have for CryoSPARC single-particle reconstruction? "
         "Just show me the catalog — don't run anything yet.",
         "search_workflow",
-        id="search_catalog",
+        id="search_workflow",
     ),
     pytest.param(
         "Cancel my BioMate run with id run-abc-123 — I made a mistake in the params.",
         "cancel_run",
-        id="cancel_explicit",
+        id="cancel_run",
     ),
     pytest.param(
         "I have a UniProt ID P04637. Just look up its basic info — no workflow needed.",
         "query_database",
-        id="db_lookup",
+        id="query_database",
+    ),
+    pytest.param(
+        "For the WGS variant-calling workflow (id 12704), show me the full list of "
+        "input parameters and steps it expects. Don't launch it — I just want the spec.",
+        "get_workflow_spec",
+        id="get_workflow_spec",
+    ),
+    pytest.param(
+        "Launch workflow 12849 with explicit params: my already-uploaded FASTQ at "
+        "s3://biomate-demo/sample_R1.fastq.gz as the reads input. Start the run now.",
+        "run_workflow",
+        id="run_workflow",
+    ),
+    pytest.param(
+        "List the BioMate runs I started in the last week, most recent first.",
+        "list_runs",
+        id="list_runs",
+    ),
+    pytest.param(
+        "What's the current status and progress of my run run-xyz-789?",
+        "get_run",
+        id="get_run",
+    ),
+    pytest.param(
+        # preview_file requires an explicit s3_key; give one so the model doesn't
+        # need get_run to discover the file path first.
+        "Render a preview of the output file at s3_key "
+        "'runs/run-xyz-789/deseq2/volcano.png' so I can see what it looks like — "
+        "I already have the path, no need to look up the run.",
+        "preview_file",
+        id="preview_file",
+    ),
+    pytest.param(
+        "Generate a downloadable PDF methods report for run run-xyz-789.",
+        "export_report",
+        id="export_report",
+    ),
+    pytest.param(
+        # analyze_results' own description says "use after get_run"; presuppose the
+        # run is already fetched so the only remaining step is AI interpretation.
+        "I've already pulled run run-xyz-789 and I'm looking at its differential-"
+        "expression table now — no need to fetch it again. Ask BioMate's AI to "
+        "interpret these results: what do they mean biologically, which pathways stand out?",
+        "analyze_results",
+        id="analyze_results",
+    ),
+    pytest.param(
+        "My run run-xyz-789 failed. Diagnose the error and tell me the root cause and how to fix it.",
+        "explain_error",
+        id="explain_error",
+    ),
+    pytest.param(
+        "Resolve the accession GSE183947 to the matching workflow and pre-filled params.",
+        "resolve_accession",
+        id="resolve_accession",
+    ),
+    pytest.param(
+        "List the files in my BioMate S3 workspace so I can see what data I already have.",
+        "browse_data",
+        id="browse_data",
+    ),
+    pytest.param(
+        "Download the UniProt human proteome FASTA from its public URL into my BioMate S3 workspace.",
+        "fetch_public_data",
+        id="fetch_public_data",
+    ),
+    pytest.param(
+        "Pull up the results from my previous CRISPR screen runs — I want to reuse what I did before.",
+        "recall_memory",
+        id="recall_memory",
+    ),
+    pytest.param(
+        "I have a local FASTQ file on my laptop I need to upload before running anything — "
+        "give me a way to upload it to BioMate storage.",
+        "upload_file",
+        id="upload_file",
     ),
 ]
 
