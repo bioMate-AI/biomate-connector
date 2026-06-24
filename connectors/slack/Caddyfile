@@ -1,0 +1,7 @@
+# Auto-HTTPS for the Slack connector. CONNECTOR_DOMAIN comes from .env.
+# Caddy fetches + renews a Let's Encrypt cert automatically (needs ports 80+443
+# reachable and the DNS A record pointing here).
+{$CONNECTOR_DOMAIN} {
+    encode gzip
+    reverse_proxy slack-bot:8090
+}
