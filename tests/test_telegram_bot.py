@@ -301,5 +301,61 @@ class TestSendMessage(unittest.TestCase):
             self.assertFalse(send_message(1, "hi"))
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Tests: webhook secret-token verification (X-Telegram-Bot-Api-Secret-Token)
+#
+# Telegram echoes the setWebhook `secret_token` back on every update. Without
+# this check, anyone who learns the public webhook URL can POST forged updates
+# (spoofed messages from arbitrary chat_ids). Covers test plan S.10 / 9.4.
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestWebhookSecret(unittest.TestCase):
+
+    SECRET = "s3cr3t-token-xyz"
+
+    def _client(self):
+        return telegram_bot.create_flask_app().test_client()
+
+    def test_no_secret_configured_allows_update(self):
+        """Back-compat: when no secret is set, updates pass (with a logged warning)."""
+        with patch("telegram_bot.TELEGRAM_WEBHOOK_SECRET", ""):
+            self.assertTrue(telegram_bot.verify_webhook_secret(None))
+            self.assertTrue(telegram_bot.verify_webhook_secret("anything"))
+
+    def test_correct_secret_passes(self):
+        with patch("telegram_bot.TELEGRAM_WEBHOOK_SECRET", self.SECRET):
+            self.assertTrue(telegram_bot.verify_webhook_secret(self.SECRET))
+
+    def test_wrong_secret_rejected(self):
+        with patch("telegram_bot.TELEGRAM_WEBHOOK_SECRET", self.SECRET):
+            self.assertFalse(telegram_bot.verify_webhook_secret("wrong"))
+            self.assertFalse(telegram_bot.verify_webhook_secret(None))  # missing header
+
+    def test_webhook_route_403_on_wrong_secret(self):
+        """A forged POST with the wrong header is rejected before any dispatch."""
+        spawned = []
+        with patch("telegram_bot.TELEGRAM_BOT_TOKEN", "tkn"), \
+             patch("telegram_bot.TELEGRAM_WEBHOOK_SECRET", self.SECRET), \
+             patch("telegram_bot.handle_update", side_effect=lambda u: spawned.append(u)):
+            resp = self._client().post(
+                "/connect/telegram/webhook",
+                json={"message": {"chat": {"id": 1}, "text": "spoofed"}},
+                headers={"X-Telegram-Bot-Api-Secret-Token": "forged"},
+            )
+        self.assertEqual(resp.status_code, 403)
+        self.assertEqual(spawned, [])  # update never dispatched
+
+    def test_webhook_route_200_on_correct_secret(self):
+        with patch("telegram_bot.TELEGRAM_BOT_TOKEN", "tkn"), \
+             patch("telegram_bot.TELEGRAM_WEBHOOK_SECRET", self.SECRET), \
+             patch("telegram_bot.handle_update", return_value=None):
+            resp = self._client().post(
+                "/connect/telegram/webhook",
+                json={"message": {"chat": {"id": 1}, "text": "real"}},
+                headers={"X-Telegram-Bot-Api-Secret-Token": self.SECRET},
+            )
+        self.assertEqual(resp.status_code, 200)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

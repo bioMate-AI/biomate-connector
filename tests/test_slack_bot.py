@@ -342,6 +342,82 @@ class TestHandleSlashCommand(unittest.TestCase):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Tests: long-output rendering + multi-user isolation in a single channel
+#
+# Block Kit caps a section text at 3000 chars; a long BioMate reply must be
+# truncated with a "view full results" fallback link, not sent raw (Slack would
+# reject the whole message). And two users running concurrently in the same
+# channel must each get their own response via their own response_url with their
+# own @-mention — no thread cross-talk. Covers test plan L1 gaps (Slack section).
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestLongOutputAndIsolation(unittest.TestCase):
+
+    def setUp(self):
+        _conversation_history.clear()
+
+    def _form(self, text, user_id="U123", user_name="testuser", response_url=""):
+        return {"text": text, "user_id": user_id, "user_name": user_name,
+                "response_url": response_url}
+
+    @staticmethod
+    def _section_text(blocks):
+        for b in blocks or []:
+            if b.get("type") == "section":
+                return b["text"]["text"]
+        return ""
+
+    def test_long_reply_truncated_under_block_limit(self):
+        """A multi-thousand-char reply is truncated to <3000 chars with a fallback link."""
+        posted = []
+        long_reply = "DESeq2 results: " + ("geneX up; " * 600)  # ~6k chars
+        deltas = [("delta", {"text": long_reply}), ("done", {})]
+
+        def _fake_post(channel, text, blocks=None, response_url=None):
+            posted.append({"text": text, "blocks": blocks})
+
+        with MockSSEServer(events=deltas) as srv:
+            with patch("connectors.slack.slack_bot.BIOMATE_API_URL", srv.base_url), \
+                 patch("connectors.slack.slack_bot.post_to_slack", side_effect=_fake_post):
+                handle_slash_command(self._form(
+                    "RNA-seq DE on my samples",
+                    response_url="https://hooks.slack.com/commands/fake"))
+                time.sleep(0.8)
+
+        self.assertTrue(posted, "expected an async post")
+        section = self._section_text(posted[0]["blocks"])
+        self.assertLess(len(section), 3000, "section text must stay under Block Kit's 3000 limit")
+        self.assertIn("View full results", section)
+
+    def test_two_users_same_channel_no_crosstalk(self):
+        """Concurrent runs from two users each post to their own response_url + mention."""
+        posted = []
+
+        def _fake_post(channel, text, blocks=None, response_url=None):
+            posted.append({"blocks": blocks, "response_url": response_url})
+
+        with MockSSEServer(events=[("delta", {"text": "Result for you."}), ("done", {})]) as srv:
+            with patch("connectors.slack.slack_bot.BIOMATE_API_URL", srv.base_url), \
+                 patch("connectors.slack.slack_bot.post_to_slack", side_effect=_fake_post):
+                handle_slash_command(self._form("screen aspirin", user_id="U_alice",
+                                                user_name="alice",
+                                                response_url="https://hooks.slack.com/alice"))
+                handle_slash_command(self._form("screen ibuprofen", user_id="U_bob",
+                                                user_name="bob",
+                                                response_url="https://hooks.slack.com/bob"))
+                time.sleep(1.0)
+
+        by_url = {p["response_url"]: self._section_text(p["blocks"]) for p in posted}
+        self.assertIn("https://hooks.slack.com/alice", by_url)
+        self.assertIn("https://hooks.slack.com/bob", by_url)
+        # Each reply is addressed to the right user — no cross-mention.
+        self.assertIn("@alice", by_url["https://hooks.slack.com/alice"])
+        self.assertNotIn("@bob", by_url["https://hooks.slack.com/alice"])
+        self.assertIn("@bob", by_url["https://hooks.slack.com/bob"])
+        self.assertNotIn("@alice", by_url["https://hooks.slack.com/bob"])
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Tests: Slack signature verification
 # ─────────────────────────────────────────────────────────────────────────────
 

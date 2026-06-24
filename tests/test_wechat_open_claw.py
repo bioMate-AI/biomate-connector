@@ -265,5 +265,56 @@ class TestHandleWechatMessage(unittest.TestCase):
         self.assertTrue(reply.startswith("<xml>"))
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Tests: unbind flow + long-output rendering
+#
+# WeChat caps message bodies; a long Open Claw reply must be truncated with a
+# "view full results" link, not sent raw. And `unbind` must drop the stored
+# binding. Covers test plan L1 gaps (WeChat section).
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestWeChatUnbindAndLongOutput(unittest.TestCase):
+
+    def setUp(self):
+        _conversation_history.clear()
+        import connectors.wechat.wechat_bot as wechat_bot
+        wechat_bot._user_bindings.clear()
+
+    def _xml(self, content: str, user: str = "wxuser_lo") -> str:
+        return f"""<xml>
+          <MsgType><![CDATA[text]]></MsgType>
+          <FromUserName><![CDATA[{user}]]></FromUserName>
+          <ToUserName><![CDATA[biomate]]></ToUserName>
+          <Content><![CDATA[{content}]]></Content>
+        </xml>"""
+
+    def test_unbind_removes_binding(self):
+        import connectors.wechat.wechat_bot as wechat_bot
+        handle_wechat_message(self._xml("bind key-123"), "corp")
+        self.assertEqual(wechat_bot._user_bindings.get("wxuser_lo"), "key-123")
+
+        reply = handle_wechat_message(self._xml("unbind"), "corp")
+        self.assertIn("解除", reply)
+        self.assertIsNone(wechat_bot._user_bindings.get("wxuser_lo"))
+
+    def test_long_reply_truncated_with_fallback_link(self):
+        import connectors.wechat.wechat_bot as wechat_bot
+        long_reply = "ADMET screen: " + ("compound flagged; " * 300)  # ~5k chars
+        sent = []
+
+        with patch.object(wechat_bot, "_open_claw_query", return_value=(long_reply, None)), \
+             patch.object(wechat_bot, "send_text_message",
+                          side_effect=lambda user, text: sent.append(text) or True), \
+             patch.object(wechat_bot, "send_workflow_card", return_value=True):
+            ack = handle_wechat_message(self._xml("screen my library"), "corp")
+            self.assertIn("正在分析", ack)  # immediate ack still returned
+            time.sleep(0.6)               # let the async thread finish
+
+        self.assertTrue(sent, "expected an async send_text_message")
+        # Truncated to 1800 chars + a short fallback suffix, not the raw 5k.
+        self.assertLess(len(sent[0]), 1900)
+        self.assertIn("查看完整结果", sent[0])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

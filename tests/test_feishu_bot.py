@@ -339,6 +339,120 @@ class TestHandleMessageEvent(unittest.TestCase):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Tests: long / structured reply rendering (Model-B interface adapter)
+#
+# Feishu is an interface-based surface: the bot formats the BioMate reply into a
+# native text message + interactive card. Unlike the MCP surfaces, a silent
+# formatting bug (truncated text, content dropped on long input, a card that
+# fails to build) is invisible to schema/manifest tests but very visible to the
+# end user. The bot does NOT split or truncate text today — these tests pin that
+# behaviour so a regression that drops content, or a card that chokes on a
+# real-length structured reply, is caught at L1.
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestLongOutputRendering(unittest.TestCase):
+
+    def setUp(self):
+        _conversation_history.clear()
+        feishu_bot._user_bindings.clear()
+        _seen_message_ids.clear()
+
+    @staticmethod
+    def _long_structured_reply() -> str:
+        """A realistic, long ADMET reply: a 60-row markdown table + narrative."""
+        table = "| Compound | hERG IC50 (µM) | CYP3A4 | LogP | Verdict |\n"
+        table += "|---|---|---|---|---|\n"
+        table += "".join(
+            f"| compound_{i:03d} | {1.0 + i * 0.13:.2f} | "
+            f"{'inhibitor' if i % 3 else 'clear'} | {2.1 + i * 0.05:.2f} | "
+            f"{'⚠️ flag' if i % 4 == 0 else '✅ pass'} |\n"
+            for i in range(60)
+        )
+        narrative = (
+            "\n\n**Interpretation.** Several candidates exceed the 10 µM hERG "
+            "cardiotoxicity threshold; CYP3A4 inhibition narrows the viable set "
+            "further. Review the flagged rows before promoting to a wet-lab assay. "
+        ) * 6
+        return table + narrative
+
+    def test_long_structured_reply_delivered_intact_with_card(self):
+        """End-to-end: long reply streamed over many deltas reaches Feishu uncut,
+        and the workflow card still renders alongside it."""
+        feishu_bot._user_bindings["ou_1"] = "key-bound"  # linked → proceeds to workflow
+        reply = self._long_structured_reply()
+        self.assertGreater(len(reply), 4096)  # genuinely large, multi-element output
+
+        # Stream the reply across many small delta chunks, as the engine does.
+        chunk = 80
+        deltas = [("delta", {"text": reply[i:i + chunk]})
+                  for i in range(0, len(reply), chunk)]
+        events = deltas + [
+            ("workflow_ready", {"workflow_name": "predict_admet_properties"}),
+            ("done", {}),
+        ]
+
+        sent, cards = [], []
+        with MockSSEServer(events=events) as srv:
+            with patch("feishu_bot.send_text_message",
+                       side_effect=lambda cid, txt, **k: sent.append(txt) or True), \
+                 patch("feishu_bot.send_workflow_card",
+                       side_effect=lambda cid, **k: cards.append(k) or True):
+                handle_message_event(
+                    {
+                        "message": {"message_id": "om_long", "chat_id": "oc_chat",
+                                    "message_type": "text",
+                                    "content": json.dumps({"text": "screen my library for ADMET"})},
+                        "sender": {"sender_id": {"open_id": "ou_1"}},
+                    },
+                    _base_url_override=srv.base_url,
+                )
+
+        # Exactly one text message, carrying the full reply with no truncation.
+        self.assertEqual(len(sent), 1)
+        self.assertEqual(sent[0], reply.strip())
+        self.assertIn("compound_059", sent[0])    # last table row survived
+        self.assertIn("Interpretation", sent[0])   # trailing narrative survived
+
+        # The card still renders next to the long text, with a usable button URL.
+        self.assertEqual(len(cards), 1)
+        self.assertEqual(cards[0]["workflow_name"], "predict_admet_properties")
+        self.assertTrue(cards[0]["url"])
+
+    def test_send_text_message_json_encodes_long_content(self):
+        """send_text_message JSON-encodes a long structured body into the Feishu
+        `content` field and posts it intact — the full text round-trips."""
+        long_text = self._long_structured_reply()
+        posted = {}
+
+        class _Resp:
+            status_code = 200
+
+            def raise_for_status(self):
+                pass
+
+            def json(self):
+                return {"code": 0}
+
+        def _fake_post(url, **kwargs):
+            posted["url"] = url
+            posted["json"] = kwargs.get("json")
+            posted["params"] = kwargs.get("params")
+            return _Resp()
+
+        with patch("feishu_bot.get_tenant_access_token", return_value="tok"), \
+             patch("feishu_bot.requests.post", side_effect=_fake_post):
+            ok = feishu_bot.send_text_message("oc_chat", long_text)
+
+        self.assertTrue(ok)
+        self.assertTrue(posted["url"].endswith("/open-apis/im/v1/messages"))
+        self.assertEqual(posted["params"]["receive_id_type"], "chat_id")
+        self.assertEqual(posted["json"]["msg_type"], "text")
+        # content is a JSON string; the full long text round-trips with no loss.
+        decoded = json.loads(posted["json"]["content"])
+        self.assertEqual(decoded["text"], long_text)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Tests: signed /go click-time auto-login redirect
 # ─────────────────────────────────────────────────────────────────────────────
 
