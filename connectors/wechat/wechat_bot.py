@@ -270,6 +270,10 @@ def _open_claw_query(
             if resp.status_code != 200:
                 return f"❌ BioMate返回错误 {resp.status_code}，请稍后重试。", None
 
+            # text/event-stream carries no charset, so requests defaults to
+            # ISO-8859-1 and mangles UTF-8 (CJK + em-dashes, arrows, emoji). Force UTF-8.
+            resp.encoding = "utf-8"
+
             current_event = "message"
             for raw_line in resp.iter_lines(decode_unicode=True):
                 if not raw_line:

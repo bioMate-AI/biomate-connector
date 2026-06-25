@@ -151,6 +151,11 @@ def _chat_stream_query(
             if resp.status_code != 200:
                 return f":x: BioMate returned error {resp.status_code}.", None, None
 
+            # The backend streams UTF-8, but text/event-stream carries no charset
+            # so requests defaults to ISO-8859-1 and mangles em-dashes, arrows,
+            # emoji, subscripts (mojibake). Force UTF-8 before decoding lines.
+            resp.encoding = "utf-8"
+
             current_event = "message"
             for raw_line in resp.iter_lines(decode_unicode=True):
                 if not raw_line:
