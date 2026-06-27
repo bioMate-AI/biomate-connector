@@ -222,14 +222,33 @@ class BioMateClient:
             return {**self._classify_exc(exc), "results": []}
 
     def run_workflow(self, workflow_id: str, params: dict, session_message: Optional[str] = None) -> Dict[str, Any]:
-        payload: Dict[str, Any] = {"workflow_id": workflow_id, "params": params or {}}
+        # The backend's /api/workflows/execute expects a full `workflowDefinition`
+        # object (NOT a bare {workflow_id, params}); for Nextflow workflows the
+        # run parameters must be nested at workflowDefinition.parameters — a
+        # top-level `parameters`/`params` field is ignored and the run falls back
+        # to the workflow's defaults. Fetch the spec to build the definition.
+        spec = self.get_workflow_spec(workflow_id)
+        if isinstance(spec, dict) and spec.get("error"):
+            return spec
+        wf_def: Dict[str, Any] = dict((spec or {}).get("workflow_ga") or {})
+        for k in ("name", "annotation", "description", "nextflow_path",
+                  "format", "workflow_type", "tags"):
+            if not wf_def.get(k) and (spec or {}).get(k) is not None:
+                wf_def[k] = spec[k]
+        if not wf_def.get("name"):
+            wf_def["name"] = workflow_id
+        merged_params = dict(wf_def.get("parameters") or {})
+        merged_params.update(params or {})
+        wf_def["parameters"] = merged_params
+
+        payload: Dict[str, Any] = {"workflowDefinition": wf_def}
         if session_message:
             payload["message"] = session_message
         try:
             r = self.session.post(
                 self._url("/api/workflows/execute"),
                 json=payload,
-                timeout=30,
+                timeout=60,
             )
             r.raise_for_status()
             return r.json()
@@ -237,24 +256,43 @@ class BioMateClient:
             return self._classify_exc(exc)
 
     def get_run_status(self, run_id: str) -> Dict[str, Any]:
+        # /api/pipeline/runs/{id}/status no longer exists; the run record (with
+        # live status) lives at /api/workflows/runs/{id} under `.execution`.
         try:
             r = self.session.get(
-                self._url(f"/api/pipeline/runs/{run_id}/status"),
+                self._url(f"/api/workflows/runs/{run_id}"),
                 timeout=10,
             )
             r.raise_for_status()
-            return r.json()
+            data = r.json()
+            execution = data.get("execution") or {}
+            return {
+                "run_id": run_id,
+                "status": execution.get("status") or data.get("status"),
+                "execution": execution,
+                "progress": data.get("progress"),
+            }
         except Exception as exc:
             return {**self._classify_exc(exc), "run_id": run_id}
 
     def get_run_results(self, run_id: str) -> Dict[str, Any]:
+        # Outputs now come from the run record at /api/workflows/runs/{id}
+        # (`.output_files` / `.inline_findings`), not /api/pipeline/.../outputs.
         try:
             r = self.session.get(
-                self._url(f"/api/pipeline/runs/{run_id}/outputs"),
+                self._url(f"/api/workflows/runs/{run_id}"),
                 timeout=15,
             )
             r.raise_for_status()
-            return r.json()
+            data = r.json()
+            execution = data.get("execution") or {}
+            return {
+                "run_id": run_id,
+                "status": execution.get("status") or data.get("status"),
+                "output_files": data.get("output_files", []),
+                "inline_findings": data.get("inline_findings", []),
+                "output_dir": execution.get("nextflowOutputDir"),
+            }
         except Exception as exc:
             return {**self._classify_exc(exc), "run_id": run_id}
 
