@@ -342,6 +342,25 @@ def handle_export_report(body: Dict, token: str, base_url: Optional[str] = None)
         return {"isError": True, "content": [{"type": "text", "text": str(exc)}]}
 
 
+def handle_browse_data(body: Dict, token: str, base_url: Optional[str] = None) -> Dict:
+    """GET /api/data/browse?source=&path= — public sources; S3 workspaces use
+    GET /api/s3/browse?prefix=. (It's a GET with query params, not a POST.)"""
+    base = base_url or BIOMATE_API_URL
+    src = body.get("source_id", "")
+    if src in ("biomate_workspace", "user_s3"):
+        url = f"{base}/api/s3/browse"
+        params: Dict[str, Any] = {"prefix": body.get("path", "")}
+    else:
+        url = f"{base}/api/data/browse"
+        params = {"source": src, "path": body.get("path", "/")}
+    try:
+        resp = requests.get(url, params=params, headers=_biomate_headers(token), timeout=20)
+        resp.raise_for_status()
+        return {"isError": False, "content": [{"type": "text", "text": resp.text}]}
+    except Exception as exc:
+        return {"isError": True, "content": [{"type": "text", "text": str(exc)}]}
+
+
 # Map operationId → handler
 _TOOL_HANDLERS = {
     "biomate_session":   handle_biomate_session,
@@ -353,15 +372,18 @@ _TOOL_HANDLERS = {
     "cancel_run":        handle_cancel_run,
     "analyze_results":   handle_analyze_results,
     "export_report":     handle_export_report,
+    "browse_data":       handle_browse_data,
 }
 
 # Straightforward POST {body} → endpoint proxies (no path params).
 _SIMPLE_PROXY_TOOLS = {
-    "preview_file":   "/api/files/preview",
-    "explain_error":  "/api/workflows/explain_error",
-    "query_database": "/api/databases/query",
-    "recall_memory":  "/api/memory/relevant",
-    "upload_file":    "/api/uploads/signed_url",
+    "preview_file":      "/api/files/preview",
+    "explain_error":     "/api/workflows/explain_error",
+    "query_database":    "/api/databases/query",
+    "recall_memory":     "/api/memory/relevant",
+    "upload_file":       "/api/uploads/signed_url",
+    "resolve_accession": "/api/accession/resolve",
+    "fetch_public_data": "/api/data/fetch",
 }
 
 
