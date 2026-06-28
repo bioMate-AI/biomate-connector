@@ -186,28 +186,23 @@ def handle_biomate_session(body: Dict, token: str) -> Dict:
 
 
 def handle_search_workflow(body: Dict, token: str, base_url: Optional[str] = None) -> Dict:
-    """POST /tools/search_workflow — proxy to BioMate's workflow search."""
-    query = body.get("query", "")
-    limit = body.get("limit", 5)
-    domain = body.get("domain")
+    """POST /tools/search_workflow — proxy to BioMate's workflow search.
+
+    Backend contract: POST /api/workflows/search with a JSON body
+    {query, limit, domain?}. (The old GET ?q= form is gone.)
+    """
+    payload: Dict[str, Any] = {
+        "query": body.get("query", ""),
+        "limit": body.get("limit", 5),
+    }
+    if body.get("domain"):
+        payload["domain"] = body["domain"]
 
     url = f"{base_url or BIOMATE_API_URL}/api/workflows/search"
-    params: Dict[str, Any] = {"q": query, "limit": limit}
-    if domain:
-        params["domain"] = domain
-
     try:
-        resp = requests.get(url, params=params, headers=_biomate_headers(token), timeout=15)
+        resp = requests.post(url, json=payload, headers=_biomate_headers(token), timeout=15)
         resp.raise_for_status()
         return {"isError": False, "content": [{"type": "text", "text": resp.text}]}
-    except requests.exceptions.HTTPError as exc:
-        # Fallback: route through chat stream if dedicated search endpoint doesn't exist
-        if exc.response.status_code == 404:
-            answer, _, _ = _consume_chat_stream(
-                f"Search for workflows related to: {query}", token, base_url=base_url
-            )
-            return {"isError": False, "content": [{"type": "text", "text": answer}]}
-        return {"isError": True, "content": [{"type": "text", "text": str(exc)}]}
     except Exception as exc:
         return {"isError": True, "content": [{"type": "text", "text": str(exc)}]}
 
@@ -217,7 +212,7 @@ def handle_get_run(body: Dict, token: str, base_url: Optional[str] = None) -> Di
     run_id = body.get("run_id", "")
     include_findings = body.get("include_findings", True)
 
-    url = f"{base_url or BIOMATE_API_URL}/api/runs/{run_id}"
+    url = f"{base_url or BIOMATE_API_URL}/api/workflows/runs/{run_id}"
     params = {"include_findings": str(include_findings).lower()}
 
     try:
@@ -230,7 +225,7 @@ def handle_get_run(body: Dict, token: str, base_url: Optional[str] = None) -> Di
 
 def handle_list_runs(body: Dict, token: str, base_url: Optional[str] = None) -> Dict:
     """POST /tools/list_runs — proxy to BioMate's runs list."""
-    url = f"{base_url or BIOMATE_API_URL}/api/runs"
+    url = f"{base_url or BIOMATE_API_URL}/api/workflows/runs"
     params = {
         "limit": body.get("limit", 10),
         "status": body.get("status", "all"),
@@ -249,7 +244,7 @@ def handle_list_runs(body: Dict, token: str, base_url: Optional[str] = None) -> 
 def handle_cancel_run(body: Dict, token: str, base_url: Optional[str] = None) -> Dict:
     """POST /tools/cancel_run."""
     run_id = body.get("run_id", "")
-    url = f"{base_url or BIOMATE_API_URL}/api/runs/{run_id}/cancel"
+    url = f"{base_url or BIOMATE_API_URL}/api/workflows/runs/{run_id}/cancel"
     try:
         resp = requests.post(url, headers=_biomate_headers(token), timeout=10)
         resp.raise_for_status()
@@ -269,25 +264,104 @@ def _simple_proxy_post(endpoint: str, body: Dict, token: str, base_url: Optional
         return {"isError": True, "content": [{"type": "text", "text": str(exc)}]}
 
 
+def handle_get_workflow_spec(body: Dict, token: str, base_url: Optional[str] = None) -> Dict:
+    """GET /api/workflows/spec?workflow_id= (the endpoint is GET, not POST)."""
+    url = f"{base_url or BIOMATE_API_URL}/api/workflows/spec"
+    try:
+        resp = requests.get(url, params={"workflow_id": body.get("workflow_id", "")},
+                            headers=_biomate_headers(token), timeout=15)
+        resp.raise_for_status()
+        return {"isError": False, "content": [{"type": "text", "text": resp.text}]}
+    except Exception as exc:
+        return {"isError": True, "content": [{"type": "text", "text": str(exc)}]}
+
+
+def handle_run_workflow(body: Dict, token: str, base_url: Optional[str] = None) -> Dict:
+    """POST /api/workflows/execute. The backend needs a full `workflowDefinition`;
+    Nextflow run params nest at workflowDefinition.parameters (a top-level field is
+    ignored → run uses defaults). Build the definition from the spec when the
+    caller passes only a workflow_id."""
+    base = base_url or BIOMATE_API_URL
+    wf_def = body.get("workflowDefinition") or body.get("workflow_definition")
+    params = body.get("params") or body.get("parameters") or {}
+    if not wf_def:
+        wid = body.get("workflow_id", "")
+        if not wid:
+            return {"isError": True, "content": [{"type": "text", "text": "workflow_id or workflowDefinition is required"}]}
+        try:
+            sp = requests.get(f"{base}/api/workflows/spec", params={"workflow_id": wid},
+                              headers=_biomate_headers(token), timeout=15)
+            sp.raise_for_status()
+            spec = sp.json()
+        except Exception as exc:
+            return {"isError": True, "content": [{"type": "text", "text": f"spec lookup failed: {exc}"}]}
+        wf_def = dict(spec.get("workflow_ga") or {})
+        for k in ("name", "annotation", "description", "nextflow_path", "format", "workflow_type", "tags"):
+            if not wf_def.get(k) and spec.get(k) is not None:
+                wf_def[k] = spec[k]
+        if not wf_def.get("name"):
+            wf_def["name"] = wid
+    merged = dict(wf_def.get("parameters") or {})
+    merged.update(params or {})
+    wf_def["parameters"] = merged
+    payload: Dict[str, Any] = {"workflowDefinition": wf_def}
+    if body.get("message"):
+        payload["message"] = body["message"]
+    try:
+        resp = requests.post(f"{base}/api/workflows/execute", json=payload,
+                             headers=_biomate_headers(token), timeout=60)
+        resp.raise_for_status()
+        return {"isError": False, "content": [{"type": "text", "text": resp.text}]}
+    except Exception as exc:
+        return {"isError": True, "content": [{"type": "text", "text": str(exc)}]}
+
+
+def handle_analyze_results(body: Dict, token: str, base_url: Optional[str] = None) -> Dict:
+    """POST /api/workflows/runs/{id}/ai/analyze (run_id lives in the path)."""
+    url = f"{base_url or BIOMATE_API_URL}/api/workflows/runs/{body.get('run_id', '')}/ai/analyze"
+    try:
+        resp = requests.post(url, json={"question": body.get("question", "")},
+                             headers=_biomate_headers(token), timeout=60)
+        resp.raise_for_status()
+        return {"isError": False, "content": [{"type": "text", "text": resp.text}]}
+    except Exception as exc:
+        return {"isError": True, "content": [{"type": "text", "text": str(exc)}]}
+
+
+def handle_export_report(body: Dict, token: str, base_url: Optional[str] = None) -> Dict:
+    """POST /api/workflows/runs/{id}/findings/report (run_id lives in the path)."""
+    url = f"{base_url or BIOMATE_API_URL}/api/workflows/runs/{body.get('run_id', '')}/findings/report"
+    payload: Dict[str, Any] = {"format": body.get("format", "pdf")}
+    if body.get("sections"):
+        payload["sections"] = body["sections"]
+    try:
+        resp = requests.post(url, json=payload, headers=_biomate_headers(token), timeout=120)
+        resp.raise_for_status()
+        return {"isError": False, "content": [{"type": "text", "text": resp.text}]}
+    except Exception as exc:
+        return {"isError": True, "content": [{"type": "text", "text": str(exc)}]}
+
+
 # Map operationId → handler
 _TOOL_HANDLERS = {
-    "biomate_session": handle_biomate_session,
-    "search_workflow": handle_search_workflow,
-    "get_run": handle_get_run,
-    "list_runs": handle_list_runs,
-    "cancel_run": handle_cancel_run,
+    "biomate_session":   handle_biomate_session,
+    "search_workflow":   handle_search_workflow,
+    "get_workflow_spec": handle_get_workflow_spec,
+    "run_workflow":      handle_run_workflow,
+    "get_run":           handle_get_run,
+    "list_runs":         handle_list_runs,
+    "cancel_run":        handle_cancel_run,
+    "analyze_results":   handle_analyze_results,
+    "export_report":     handle_export_report,
 }
 
+# Straightforward POST {body} → endpoint proxies (no path params).
 _SIMPLE_PROXY_TOOLS = {
-    "get_workflow_spec":  "/api/workflows/spec",
-    "run_workflow":       "/api/workflows/execute",
-    "preview_file":       "/api/files/preview",
-    "export_report":      "/api/runs/report",
-    "analyze_results":    "/api/runs/analyze",
-    "explain_error":      "/api/runs/explain",
-    "query_database":     "/api/db/query",
-    "recall_memory":      "/api/memory/recall",
-    "upload_file":        "/api/files/upload-url",
+    "preview_file":   "/api/files/preview",
+    "explain_error":  "/api/workflows/explain_error",
+    "query_database": "/api/databases/query",
+    "recall_memory":  "/api/memory/relevant",
+    "upload_file":    "/api/uploads/signed_url",
 }
 
 
