@@ -38,6 +38,58 @@ BIOMATE_REFRESH_TOKEN = "<your-refresh-token>"
 
 Refresh token: https://biomate.ai/account/connectors/codex.
 
+## Local dev/test config (against a non-prod backend)
+
+To point Codex at a dev/test BioMate backend using the in-repo Python MCP
+server (API-key auth instead of OAuth):
+
+```toml
+[mcp_servers.biomate]
+command = "/path/to/python"
+args = ["/path/to/biomate-connector/mcp/biomate_mcp_server.py"]
+startup_timeout_sec = 60
+
+[mcp_servers.biomate.env]
+BIOMATE_API_URL = "https://test.stage-public.biomate.ai"
+BIOMATE_API_KEY  = "bm_live_…"
+```
+
+Note the env var names differ from prod: the Python server reads
+`BIOMATE_API_URL` + `BIOMATE_API_KEY`; the npm `@biomate/mcp-server` reads
+`BIOMATE_API_BASE` + `BIOMATE_REFRESH_TOKEN`.
+
+## Sandbox & approvals (important)
+
+BioMate's MCP tools make outbound network calls (to the BioMate backend).
+Codex runs MCP servers under its sandbox, and in the **restricted** sandbox
+modes those calls are blocked/auto-cancelled — you'll see:
+
+```
+mcp: biomate/query_database started
+mcp: biomate/query_database (failed)
+user cancelled MCP tool call
+```
+
+Verified on `codex-cli 0.142.3`: `read-only` **and** `workspace-write`
+(even with `network_access = true`) both fail this way; only **full access**
+lets the tool call complete.
+
+- **Codex desktop app:** just **approve / trust** the tool call (or the
+  project) when prompted — it runs interactively with the needed access.
+- **Headless CLI:** pass full access for that run:
+
+  ```bash
+  codex exec --dangerously-bypass-approvals-and-sandbox \
+    "Look up UniProt P04637 with BioMate's query_database tool."
+  ```
+
+  Prefer the per-run flag over setting `sandbox_mode = "danger-full-access"`
+  globally (the global setting weakens the sandbox for *all* Codex usage).
+
+Verified end-to-end (codex exec → biomate MCP → backend): `query_database`
+(P04637 → TP53) and `search_workflow` (hERG → `herg_cardiac_safety_qsar`)
+both return real data and the model answers correctly.
+
 ## Tools available
 
 Same 14-tool surface as the Claude Code integration. See [`../claude-code/README.md`](../claude-code/README.md).
