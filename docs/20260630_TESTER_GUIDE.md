@@ -1,6 +1,8 @@
 # BioMate Connect — 测试方案 & 使用测试流程（Tester Guide）
 
 **日期:** 2026-06-30 · **测试后端:** `https://test.stage-public.biomate.ai`
+· English: [20260630_TESTER_GUIDE.en.md](./20260630_TESTER_GUIDE.en.md)
+· 小白速查单页: [BEGINNER_CHEATSHEET.md](./BEGINNER_CHEATSHEET.md)
 
 这份文档面向三类测试人员 —— **小白（不懂技术）、工程师、专家** —— 每类有自己的
 一条清晰路径。照着做即可，不需要先读懂全部内容。
