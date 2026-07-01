@@ -407,6 +407,21 @@ class BioMateClient:
             return {**self._classify_exc(exc), "run_id": run_id}
 
     def preview_file(self, s3_key: str, run_id: Optional[str] = None, max_rows: int = 100) -> Dict[str, Any]:
+        # The backend requires the full s3://bucket/key form (get_run exposes this
+        # verbatim as `s3_uri`). Reject a bare key early with an actionable message
+        # instead of surfacing the backend's terse "s3_key must be s3://..." error.
+        if not isinstance(s3_key, str) or not s3_key.startswith("s3://"):
+            return {
+                "error": True,
+                "code": "BAD_S3_KEY",
+                "human_message": (
+                    "preview_file needs the full s3_uri (starting with 's3://') from a "
+                    "get_run output_files entry — copy its `s3_uri` value verbatim, "
+                    "not just the key path."
+                ),
+                "debug": f"s3_key must start with s3:// (got: {s3_key!r})",
+                "s3_key": s3_key,
+            }
         payload: Dict[str, Any] = {"s3_key": s3_key, "max_rows": max_rows}
         if run_id:
             payload["run_id"] = run_id

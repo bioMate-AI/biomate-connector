@@ -272,7 +272,7 @@ TOOL_SCHEMAS: List[ToolSchema] = [
         input_schema={
             "type": "object",
             "properties": {
-                "s3_key": {"type": "string", "description": "S3 key (s3://bucket/path) from get_run output_files."},
+                "s3_key": {"type": "string", "description": "The full s3_uri value (must start with 's3://') copied verbatim from a get_run output_files entry — e.g. 's3://bucket/path/file.json'. NOT a bare key; the s3:// prefix is required."},
                 "run_id": {"type": "string", "description": "Optional run_id for context-aware parsing."},
                 "max_rows": {"type": "integer", "description": "For tabular files (default 100).", "default": 100},
             },
