@@ -41,11 +41,27 @@ import requests
 # Config
 # ──────────────────────────────────────────────────────────────────────────────
 
-BIOMATE_API_URL = os.environ.get("BIOMATE_API_URL", "http://localhost:5000")
+_DEFAULT_API_URL = "http://localhost:5000"
+# Whether the operator explicitly pointed us at a backend. When False we fall
+# back to localhost:5000, which on macOS collides with the AirPlay/Control-Center
+# receiver (also on :5000) — that listener accepts the TCP connection but never
+# answers /api/* , producing confusing "Read timed out" errors instead of a clean
+# connection refusal. run_server() warns loudly in that case.
+BIOMATE_API_URL_EXPLICIT = "BIOMATE_API_URL" in os.environ
+BIOMATE_API_URL = os.environ.get("BIOMATE_API_URL", _DEFAULT_API_URL)
 BIOMATE_API_KEY = os.environ.get("BIOMATE_API_KEY", "")
 SERVER_NAME = "biomate"
 SERVER_VERSION = "2.0.0"
 PROTOCOL_VERSION = "2024-11-05"
+
+# HTTP timeouts as (connect, read) tuples so a wrong/unreachable host fails fast
+# on connect while genuinely slow endpoints get a generous read budget.
+# The semantic workflow search/spec endpoints run vector retrieval + LLM param
+# inference. After the backend added embedding-index warm-up at boot (PR #77)
+# these settle at ~2-3s, ~8s worst-case under concurrent batches; the 30s read
+# budget leaves ~4x headroom while still failing in bounded time.
+HTTP_CONNECT_TIMEOUT = 5
+SEARCH_TIMEOUT = (HTTP_CONNECT_TIMEOUT, 30)
 
 # Thread-safe stdout — progress notifications are emitted from worker threads
 # while the main loop continues reading stdin.
@@ -214,7 +230,7 @@ class BioMateClient:
             r = self.session.post(
                 self._url("/api/workflows/search"),
                 json={"query": query, "limit": limit},
-                timeout=15,
+                timeout=SEARCH_TIMEOUT,
             )
             r.raise_for_status()
             return r.json()
@@ -371,7 +387,7 @@ class BioMateClient:
             r = self.session.get(
                 self._url("/api/workflows/spec"),
                 params={"workflow_id": workflow_id},
-                timeout=15,
+                timeout=SEARCH_TIMEOUT,
             )
             r.raise_for_status()
             return r.json()
@@ -1104,6 +1120,16 @@ def handle_request(client: BioMateClient, msg: Dict[str, Any]) -> Optional[Dict[
 def run_server() -> None:
     client = BioMateClient(BIOMATE_API_URL, BIOMATE_API_KEY)
     log.warning(f"BioMate MCP Server {SERVER_VERSION} starting (api={BIOMATE_API_URL})")
+    if not BIOMATE_API_URL_EXPLICIT:
+        log.warning(
+            "BIOMATE_API_URL is not set — defaulting to %s. On macOS this port is "
+            "used by the AirPlay/Control-Center receiver, so requests can hang until "
+            "they time out instead of reaching BioMate. Set BIOMATE_API_URL "
+            "(e.g. https://app.biomate.ai) to point at a real backend.",
+            _DEFAULT_API_URL,
+        )
+    if not BIOMATE_API_KEY:
+        log.warning("BIOMATE_API_KEY is empty — authenticated endpoints will return AUTH_FAILED.")
 
     for raw_line in sys.stdin:
         raw_line = raw_line.strip()
