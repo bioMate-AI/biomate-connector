@@ -28,6 +28,24 @@ don't need to read the whole thing first.
 > beginners verify "it works", engineers verify "it installs", experts verify
 > "it's correct + consistent across surfaces".
 
+### Two connection paths (both hit the same backend, differently)
+
+```
+① MCP (Model A) — Claude Code / Cursor / Codex / Desktop:
+   client ──stdio──▶ local mcp/biomate_mcp_server.py ──HTTPS──▶ test.stage-public.biomate.ai backend
+   (the MCP server is spawned LOCALLY by the client and calls the backend API directly;
+    there is NO MCP container on EC2)
+
+② Chat adapters (Model B) — Slack / Feishu / ChatGPT:
+   platform ──HTTPS──▶ EC2 containers biomate-slack / -feishu / -chatgpt-adapter ──▶ same backend
+```
+
+> **In one line**: `https://test.stage-public.biomate.ai` is the **backend**
+> (running on EC2). The **MCP server runs locally, not on EC2** — it just
+> connects to that backend; the Slack/Feishu/ChatGPT adapters are the
+> "biomate connect containers deployed on EC2". The two paths are parallel and
+> share the backend.
+
 ---
 
 ## 1. Automated test plan (for engineers / CI)

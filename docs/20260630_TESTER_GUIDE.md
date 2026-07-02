@@ -25,6 +25,21 @@
 > 这 5 个入口背后是**同一个** BioMate 后端和**同一套 17 个工具**。差别只在“在哪用”
 > 和“怎么连”。所以小白验“能用”，工程师验“能装”，专家验“算得对 + 各端一致”。
 
+### 接入路径分两种（都打到同一个后端，但走法不同）
+
+```
+① MCP（Model A）—— Claude Code / Cursor / Codex / Desktop：
+   客户端 ──stdio──▶ 本地 mcp/biomate_mcp_server.py ──HTTPS──▶ test.stage-public.biomate.ai 后端
+   （MCP server 由客户端在【本地】拉起，直接连后端 API；EC2 上【没有】MCP 容器）
+
+② 聊天适配器（Model B）—— Slack / 飞书 / ChatGPT：
+   平台 ──HTTPS──▶ EC2 上的 biomate-slack / -feishu / -chatgpt-adapter 容器 ──▶ 同一后端
+```
+
+> **一句话**：`https://test.stage-public.biomate.ai` 是**后端**（跑在 EC2 上）。
+> **MCP server 跑在本地、不在 EC2**，只是连这个后端；而 Slack/飞书/ChatGPT 的适配器
+> 才是【部署在 EC2 上的 biomate connect 容器】。两条路平行，共用后端。
+
 ---
 
 ## 1. 自动化测试方案（给工程师 / CI）

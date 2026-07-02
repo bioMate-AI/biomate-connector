@@ -12,3 +12,6 @@ __pycache__/
 dist/
 build/
 .pytest_cache/
+
+# Local MCP test config (contains API key — never commit)
+.mcp.json
