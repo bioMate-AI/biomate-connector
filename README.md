@@ -194,6 +194,14 @@ See [`oauth_server/oauth/server.py`](oauth_server/oauth/server.py) for configura
 
 ---
 
+## Privacy & legal
+
+- **Privacy policy:** [biomate.ai/legal/privacy](https://biomate.ai/legal/privacy) — what the connector sends to BioMate, and how it is used, stored, shared, and retained. Source: [`connectors/legal/privacy.md`](connectors/legal/privacy.md).
+- **Terms of service:** [biomate.ai/terms](https://biomate.ai/terms)
+- **Support:** [support@biomate.ai](mailto:support@biomate.ai) · [biomate.ai/support](https://biomate.ai/support)
+
+---
+
 ## License
 
 MIT — for the connector code in this repository. BioMate platform usage is governed by [biomate.ai/terms](https://biomate.ai/terms).

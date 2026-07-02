@@ -52,6 +52,27 @@ class ToolSchema:
     # Streams progress notifications via MCP notifications/progress when true.
     streaming: bool = False
 
+    # ── Directory / MCP tool annotations (required by the Anthropic Claude
+    #    Directory submission). `title` is a human-readable display name; the
+    #    *_hint booleans are behavioural annotations per the MCP spec's
+    #    ToolAnnotations object. Defaults match the MCP spec defaults
+    #    (readOnly=false, destructive=false, idempotent=false, openWorld=false).
+    title: str = ""
+    read_only_hint: bool = False
+    destructive_hint: bool = False
+    idempotent_hint: bool = False
+    open_world_hint: bool = False
+
+    def annotations(self) -> Dict[str, Any]:
+        """MCP `ToolAnnotations` object emitted under each tool's `annotations`."""
+        return {
+            "title": self.title,
+            "readOnlyHint": self.read_only_hint,
+            "destructiveHint": self.destructive_hint,
+            "idempotentHint": self.idempotent_hint,
+            "openWorldHint": self.open_world_hint,
+        }
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Canonical schema definitions — DO NOT duplicate elsewhere.
@@ -129,6 +150,11 @@ TOOL_SCHEMAS: List[ToolSchema] = [
         },
         backend_path="/api/open-claw/stream",
         streaming=True,
+        title="Run BioMate Session",
+        read_only_hint=False,
+        destructive_hint=False,
+        idempotent_hint=False,
+        open_world_hint=True,
     ),
 
     # ── Tier 2: workflow primitives ───────────────────────────────────────────
@@ -154,6 +180,9 @@ TOOL_SCHEMAS: List[ToolSchema] = [
             "required": ["query"],
         },
         backend_path="/api/workflows/search",
+        title="Search Workflows",
+        read_only_hint=True,
+        open_world_hint=True,
     ),
     ToolSchema(
         name="get_workflow_spec",
@@ -173,6 +202,8 @@ TOOL_SCHEMAS: List[ToolSchema] = [
         },
         backend_path="/api/workflows/spec",
         backend_method="GET",
+        title="Get Workflow Spec",
+        read_only_hint=True,
     ),
     ToolSchema(
         name="run_workflow",
@@ -203,6 +234,11 @@ TOOL_SCHEMAS: List[ToolSchema] = [
         },
         backend_path="/api/workflows/execute",
         streaming=True,
+        title="Run Workflow",
+        read_only_hint=False,
+        destructive_hint=False,
+        idempotent_hint=False,
+        open_world_hint=True,
     ),
     ToolSchema(
         name="get_run",
@@ -227,6 +263,8 @@ TOOL_SCHEMAS: List[ToolSchema] = [
         },
         backend_path="/api/workflows/runs/{run_id}",
         backend_method="GET",
+        title="Get Run Details",
+        read_only_hint=True,
     ),
     ToolSchema(
         name="cancel_run",
@@ -238,6 +276,10 @@ TOOL_SCHEMAS: List[ToolSchema] = [
             "required": ["run_id"],
         },
         backend_path="/api/workflows/runs/{run_id}/cancel",
+        title="Cancel Run",
+        read_only_hint=False,
+        destructive_hint=True,
+        idempotent_hint=True,
     ),
     ToolSchema(
         name="list_runs",
@@ -257,6 +299,8 @@ TOOL_SCHEMAS: List[ToolSchema] = [
         },
         backend_path="/api/workflows/runs",
         backend_method="GET",
+        title="List Runs",
+        read_only_hint=True,
     ),
 
     # ── Tier 3: outputs, analysis, reporting ──────────────────────────────────
@@ -279,6 +323,8 @@ TOOL_SCHEMAS: List[ToolSchema] = [
             "required": ["s3_key"],
         },
         backend_path="/api/files/preview",
+        title="Preview Output File",
+        read_only_hint=True,
     ),
     ToolSchema(
         name="export_report",
@@ -303,6 +349,10 @@ TOOL_SCHEMAS: List[ToolSchema] = [
             "required": ["run_id"],
         },
         backend_path="/api/workflows/runs/{run_id}/findings/report",
+        title="Export Report",
+        read_only_hint=False,
+        destructive_hint=False,
+        idempotent_hint=True,
     ),
     ToolSchema(
         name="analyze_results",
@@ -321,6 +371,9 @@ TOOL_SCHEMAS: List[ToolSchema] = [
             "required": ["run_id"],
         },
         backend_path="/api/workflows/runs/{run_id}/ai/analyze",
+        title="Analyze Results",
+        read_only_hint=True,
+        open_world_hint=True,
     ),
     ToolSchema(
         name="explain_error",
@@ -339,6 +392,9 @@ TOOL_SCHEMAS: List[ToolSchema] = [
             "required": ["run_id"],
         },
         backend_path="/api/workflows/explain_error",
+        title="Explain Run Error",
+        read_only_hint=True,
+        open_world_hint=True,
     ),
     ToolSchema(
         name="query_database",
@@ -366,6 +422,9 @@ TOOL_SCHEMAS: List[ToolSchema] = [
             "required": ["database", "query"],
         },
         backend_path="/api/databases/query",
+        title="Query Biological Database",
+        read_only_hint=True,
+        open_world_hint=True,
     ),
     ToolSchema(
         name="resolve_accession",
@@ -390,6 +449,9 @@ TOOL_SCHEMAS: List[ToolSchema] = [
             "required": ["accession"],
         },
         backend_path="/api/accession/resolve",
+        title="Resolve Accession",
+        read_only_hint=True,
+        open_world_hint=True,
     ),
     ToolSchema(
         name="browse_data",
@@ -423,6 +485,9 @@ TOOL_SCHEMAS: List[ToolSchema] = [
             "required": ["source_id"],
         },
         backend_path="/api/data/browse",
+        title="Browse Data Repository",
+        read_only_hint=True,
+        open_world_hint=True,
     ),
     ToolSchema(
         name="fetch_public_data",
@@ -452,6 +517,11 @@ TOOL_SCHEMAS: List[ToolSchema] = [
             "required": ["source_id"],
         },
         backend_path="/api/data/fetch",
+        title="Fetch Public Data",
+        read_only_hint=False,
+        destructive_hint=False,
+        idempotent_hint=True,
+        open_world_hint=True,
     ),
     ToolSchema(
         name="recall_memory",
@@ -476,6 +546,8 @@ TOOL_SCHEMAS: List[ToolSchema] = [
             "required": ["query"],
         },
         backend_path="/api/memory/relevant",
+        title="Recall Memory",
+        read_only_hint=True,
     ),
     ToolSchema(
         name="upload_file",
@@ -496,6 +568,10 @@ TOOL_SCHEMAS: List[ToolSchema] = [
             "required": ["filename"],
         },
         backend_path="/api/uploads/signed_url",
+        title="Upload File",
+        read_only_hint=False,
+        destructive_hint=False,
+        idempotent_hint=False,
     ),
 ]
 
@@ -521,17 +597,45 @@ _LITE_SCHEMAS = [t for t in TOOL_SCHEMAS if t.name in LITE_TOOL_NAMES]
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Server-level metadata — required by the Anthropic Claude Directory listing
+# (privacy policy is mandatory; support + terms + docs are strongly recommended).
+# Keep in sync with the OpenAPI `info` block in to_openapi() and README.md.
+# ──────────────────────────────────────────────────────────────────────────────
+
+SERVER_METADATA: Dict[str, str] = {
+    "name": "BioMate",
+    "vendor": "BioMate AI",
+    "documentation_url": "https://biomate.ai/connectors",
+    "privacy_policy_url": "https://biomate.ai/legal/privacy",
+    "terms_of_service_url": "https://biomate.ai/legal/terms",
+    "support_email": "support@biomate.ai",
+    "support_url": "https://biomate.ai/support",
+}
+
+
+def to_server_info() -> Dict[str, str]:
+    """Server-level listing metadata (privacy, terms, support, docs)."""
+    return dict(SERVER_METADATA)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Surface-specific exporters
 # ──────────────────────────────────────────────────────────────────────────────
 
 
 def to_mcp() -> List[Dict[str, Any]]:
-    """MCP `tools/list` shape. Uses `inputSchema` (camelCase, per MCP spec)."""
+    """MCP `tools/list` shape. Uses `inputSchema` (camelCase, per MCP spec).
+
+    Emits the top-level `title` display name and the `annotations`
+    (ToolAnnotations) object required by the Anthropic Claude Directory.
+    """
     return [
         {
             "name": t.name,
+            "title": t.title,
             "description": t.description,
             "inputSchema": t.input_schema,
+            "annotations": t.annotations(),
         }
         for t in TOOL_SCHEMAS
     ]
@@ -569,7 +673,13 @@ def to_openai() -> List[Dict[str, Any]]:
 def to_lite_mcp() -> List[Dict[str, Any]]:
     """Lite MCP tool list (3 tools) for consumer surfaces."""
     return [
-        {"name": t.name, "description": t.description, "inputSchema": t.input_schema}
+        {
+            "name": t.name,
+            "title": t.title,
+            "description": t.description,
+            "inputSchema": t.input_schema,
+            "annotations": t.annotations(),
+        }
         for t in _LITE_SCHEMAS
     ]
 
@@ -738,6 +848,8 @@ def build_manifest_json(output_path: Optional[Path] = None) -> Path:
     payload = {
         "version": "2.0.0",
         "generated_from": "mcp/tools_manifest.py",
+        # Server-level listing metadata (privacy policy, terms, support, docs).
+        "server": to_server_info(),
         # Full 17-tool set (MCP Desktop, Cursor, Codex, programmatic API)
         "mcp": to_mcp(),
         "anthropic": to_anthropic(),
