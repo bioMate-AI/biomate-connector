@@ -22,8 +22,8 @@
     "/tools/biomate_session": {
       "post": {
         "operationId": "biomate_session",
-        "summary": "Run a complete BioMate scientific session from a natural-language goal.",
-        "description": "Run a complete BioMate scientific session from a natural-language goal. BioMate picks the workflow, fills parameters from context, runs on BioMate cloud, handles QC gates with auto-loop remediation, and produces findings. While running, the tool streams progress events (phase started, step completed, QC gate fired, auto-loop remediation, finding) to the host so the user sees real-time updates the same way BioMate's web panel does. Returns the final run summary, a deep link to the live panel, and the report URL.",
+        "summary": "**Primary entry point \u2014 use this for 90% of requests.",
+        "description": "**Primary entry point \u2014 use this for 90% of requests.** Run a complete BioMate scientific session from a natural-language goal. BioMate selects the right workflow from 2,455 indexed pipelines, pre-fills parameters from your goal text, executes on BioMate cloud, handles QC gates with auto-loop remediation, and produces structured findings. While running, the tool streams real-time progress (phase started, step completed, QC gate, auto-loop remediation, finding) back to the host. Returns a final run summary, a deep link to the live results panel, and the report URL. \n\n**How to write the `goal` parameter** \u2014 plain English, one to three sentences:\n\u2022 Include the *what*: analysis type + subject (e.g. 'ADMET screening', 'RNA-seq DE', 'variant calling')\n\u2022 Include *data location*: inline SMILES/sequences, S3 paths, accession numbers, or upload first with upload_file\n\u2022 Include key *parameters* that matter: organism, library type, comparisons, thresholds\n\u2022 You can omit anything BioMate can infer (it will ask if genuinely ambiguous)\n\n**Good examples:**\n  'Screen aspirin (CC(=O)Oc1ccccc1C(=O)O) and caffeine (Cn1cnc2c1c(=O)n(c(=O)n2C)C) for hERG inhibition, CYP3A4, and oral bioavailability'\n  'RNA-seq differential expression on s3://lab-bucket/exp42/fastqs/ \u2014 human GRCh38, dUTP strand-specific, treated (n=3) vs control (n=3), FDR 0.05'\n  'Whole-genome variant calling on the uploaded FASTQ pair, GRCh38, GATK HaplotypeCaller, germline mode'\n  'Run homogeneous 3D refinement in CryoSPARC on s3://cryo/job042/, C2 symmetry, box size 256'\n  'Fetch GSE183947 from GEO and run the same RNA-seq pipeline'\n\nUse run_workflow instead when the user wants to call a specific workflow by ID with explicit parameter control.",
         "x-streaming": true,
         "requestBody": {
           "required": true,
@@ -34,20 +34,20 @@
                 "properties": {
                   "goal": {
                     "type": "string",
-                    "description": "Natural language description of what to do. Examples: 'screen these 12 SMILES for hERG and CYP3A4 liability', 'run RNA-seq pipeline on FASTQ files in s3://bucket/exp42/, human, paired-end', 'predict the structure of P04637 and the top 5 destabilizing mutations'."
+                    "description": "Natural-language scientific goal. Include: analysis type, data location (inline SMILES/sequences, s3:// paths, or GEO/SRA accession numbers), and key parameters (organism, comparisons, thresholds). BioMate infers the rest. Examples: 'Screen these 5 SMILES for hERG IC50 and CYP3A4 inhibition', 'RNA-seq DE on s3://bucket/exp1/ human GRCh38 paired-end treated vs control', 'Fetch GSE183947 and run differential expression'."
                   },
                   "inputs": {
                     "type": "object",
-                    "description": "Optional structured inputs (S3 keys, sequences, SMILES, parameter overrides). BioMate will merge these with whatever it extracts from `goal`.",
+                    "description": "Optional structured inputs (S3 keys, sequences, SMILES, parameter overrides). BioMate merges these with what it extracts from `goal`. Example: {\"smiles_list\": [\"CC(=O)Oc1ccccc1C(=O)O\"], \"organism\": \"human\"}",
                     "additionalProperties": true
                   },
                   "experiment_id": {
                     "type": "string",
-                    "description": "Optional experiment to attach this run to (from recall_memory or create_experiment)."
+                    "description": "Optional experiment to attach this run to (from recall_memory)."
                   },
                   "stream": {
                     "type": "boolean",
-                    "description": "Emit progress notifications during execution. Default true. Set false for hosts without notification support (then poll get_run).",
+                    "description": "Emit progress notifications during execution. Default true. Set false for hosts without MCP notification support \u2014 then poll with get_run.",
                     "default": true
                   }
                 },
@@ -509,7 +509,7 @@
                 "properties": {
                   "s3_key": {
                     "type": "string",
-                    "description": "S3 key (s3://bucket/path) from get_run output_files."
+                    "description": "The full s3_uri value (must start with 's3://') copied verbatim from a get_run output_files entry \u2014 e.g. 's3://bucket/path/file.json'. NOT a bare key; the s3:// prefix is required."
                   },
                   "run_id": {
                     "type": "string",
@@ -917,8 +917,8 @@
     "/tools/browse_data": {
       "post": {
         "operationId": "browse_data",
-        "summary": "Browse a public biological data repository (EBI, NCBI, Ensembl, UCSC) by listing files and directories at a given path.",
-        "description": "Browse a public biological data repository (EBI, NCBI, Ensembl, UCSC) by listing files and directories at a given path. Use before fetch_public_data to navigate to the exact file you need (reference genomes, annotation GTFs, VCF datasets, etc.).",
+        "summary": "Browse a biological data repository or S3 workspace by listing files and directories at a given path.",
+        "description": "Browse a biological data repository or S3 workspace by listing files and directories at a given path. Public sources (EBI, NCBI, Ensembl, UCSC) require a path. S3 sources (biomate_workspace, user_s3) accept an optional prefix. Use before fetch_public_data to navigate to the exact file you need.",
         "x-streaming": false,
         "requestBody": {
           "required": true,
@@ -934,18 +934,19 @@
                       "ncbi_ftp",
                       "ensembl_ftp",
                       "ucsc_downloads",
-                      "http_public"
+                      "http_public",
+                      "biomate_workspace",
+                      "user_s3"
                     ],
-                    "description": "Data source to browse."
+                    "description": "Data source to browse. biomate_workspace = BioMate's S3 work bucket; user_s3 = user's own S3 bucket (if configured)."
                   },
                   "path": {
                     "type": "string",
-                    "description": "Directory path to list (e.g. '/pub/databases/uniprot/current_release/')."
+                    "description": "Directory path or S3 prefix to list (e.g. '/pub/databases/uniprot/' or 'results/run-xyz/')."
                   }
                 },
                 "required": [
-                  "source_id",
-                  "path"
+                  "source_id"
                 ]
               }
             }
