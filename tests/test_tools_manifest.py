@@ -127,9 +127,16 @@ def test_committed_manifest_json_in_sync():
     fresh = {
         "version": "2.0.0",
         "generated_from": "mcp/tools_manifest.py",
+        "server": tm.to_server_info(),
         "mcp": tm.to_mcp(),
         "anthropic": tm.to_anthropic(),
         "openai": tm.to_openai(),
+        "lite": {
+            "mcp": tm.to_lite_mcp(),
+            "anthropic": tm.to_lite_anthropic(),
+            "openai": tm.to_lite_openai(),
+            "tool_names": sorted(tm.LITE_TOOL_NAMES),
+        },
         "backend_routes": [
             {
                 "name": t.name,
