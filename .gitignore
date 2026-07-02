@@ -2,6 +2,8 @@
 .env
 .env.local
 .env.*.local
+# Local MCP client config — contains a live BIOMATE_API_KEY, dev-machine only
+.mcp.json
 
 # Python
 __pycache__/
