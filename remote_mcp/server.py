@@ -47,6 +47,9 @@ _TOOL_SCOPES: dict[str, str] = {
     "analyze_results": "runs:read",
     "explain_error": "runs:read",
     "query_database": "workflows:search",
+    "resolve_accession": "workflows:search",
+    "browse_data": "workflows:search",
+    "fetch_public_data": "files:upload",
     "recall_memory": "memory:read",
     "upload_file": "files:upload",
 }

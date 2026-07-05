@@ -234,24 +234,23 @@ account on `test.stage-public` → DCR → authorize POST with real credentials 
 login (3e) + per-user identity (3f) end-to-end: the tool call ran *as that user* via the
 minted key. (Throwaway user `627dcdb8-…` remains on the test DB; harmless.)
 
-### Tool set widened (2026-07-05)
+### Tool set widened + manifest/dispatch gap closed (2026-07-05)
 
-`BIOMATE_MCP_TOOLS` on staging is now set to the **13 `dispatch_tool`-backed tools**
-(`search_workflow, get_workflow_spec, run_workflow, get_run, cancel_run, list_runs,
-preview_file, export_report, analyze_results, explain_error, query_database, recall_memory,
-upload_file`). Verified live: `tools/list` → 13, and `query_database` returned real UniProt
-data (P01308 INS_HUMAN) as the authenticated user. **Not** enabled: `biomate_session`
-(streaming-only) and `resolve_accession` / `browse_data` / `fetch_public_data` — these are in
-the manifest but have no `dispatch_tool` handler (pre-existing manifest/dispatch gap), so
-they'd error if called. Enabling them needs handlers (+ streaming transport for
-`biomate_session`).
+`BIOMATE_MCP_TOOLS` on staging enables **16 tools** — every manifest tool except
+`biomate_session` (streaming-only). The former manifest/dispatch gap
+(`resolve_accession`, `browse_data`, `fetch_public_data` advertised but unhandled) is now
+**closed**: added `BioMateClient` methods + `dispatch_tool` routes wired to the existing
+backend endpoints (`POST /api/accession/resolve`, `GET /api/data/browse` + `GET /api/s3/browse`,
+`POST /api/data/fetch`). Verified live: `tools/list` → 16; `query_database` → UniProt
+`P01308`; `resolve_accession("GSE183947")` → `GEO_series` / "Geo Data Connector".
 
 ### Remaining
 
-- **Prod cutover** to `app.biomate.ai` still pending (this is live on staging).
-- **Manifest/dispatch gap:** `resolve_accession`, `browse_data`, `fetch_public_data` are
-  advertised in the manifest but unimplemented in `dispatch_tool` — either implement or drop
-  from the manifest.
+- **Prod cutover** to `app.biomate.ai` still pending — **not doable from this access**:
+  `app.biomate.ai` is not in a Route53 zone visible to the `galaxy-dev` creds, so DNS/edge for
+  it is owned elsewhere. The staging deploy is the template; the runbook above applies.
+- **`biomate_session`** (the streaming "primary entry point" tool) still needs Streamable-HTTP
+  progress-notification wiring before it can be enabled on the remote transport.
 
 ## Verified (2026-07-04, local)
 
