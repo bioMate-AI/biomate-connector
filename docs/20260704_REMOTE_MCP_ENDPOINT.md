@@ -234,23 +234,28 @@ account on `test.stage-public` → DCR → authorize POST with real credentials 
 login (3e) + per-user identity (3f) end-to-end: the tool call ran *as that user* via the
 minted key. (Throwaway user `627dcdb8-…` remains on the test DB; harmless.)
 
-### Tool set widened + manifest/dispatch gap closed (2026-07-05)
+### All 17 tools enabled — streaming included (2026-07-05)
 
-`BIOMATE_MCP_TOOLS` on staging enables **16 tools** — every manifest tool except
-`biomate_session` (streaming-only). The former manifest/dispatch gap
-(`resolve_accession`, `browse_data`, `fetch_public_data` advertised but unhandled) is now
-**closed**: added `BioMateClient` methods + `dispatch_tool` routes wired to the existing
-backend endpoints (`POST /api/accession/resolve`, `GET /api/data/browse` + `GET /api/s3/browse`,
-`POST /api/data/fetch`). Verified live: `tools/list` → 16; `query_database` → UniProt
-`P01308`; `resolve_accession("GSE183947")` → `GEO_series` / "Geo Data Connector".
+`BIOMATE_MCP_TOOLS` on staging enables **all 17 manifest tools**.
+
+- **Manifest/dispatch gap closed:** `resolve_accession`, `browse_data`, `fetch_public_data`
+  now have `BioMateClient` methods + `dispatch_tool` routes wired to existing backend endpoints
+  (`POST /api/accession/resolve`, `GET /api/data/browse` + `GET /api/s3/browse`,
+  `POST /api/data/fetch`). Verified live: `resolve_accession("GSE183947")` → `GEO_series` /
+  "Geo Data Connector"; `query_database` → UniProt `P01308`.
+- **`biomate_session` streaming wired.** `remote_mcp/server.py` `_run_streaming` mirrors the
+  stdio SessionRunner: it iterates the blocking `open_claw_stream` SSE generator on a worker
+  thread and bridges each event back to the event loop via `anyio.from_thread.run` to emit
+  `notifications/progress` on the request's stream (works in stateless mode via
+  `related_request_id`). Verified live: a real `biomate_session` call streamed **24 progress
+  notifications** in real time and returned the aggregated summary, running as the
+  authenticated user.
 
 ### Remaining
 
-- **Prod cutover** to `app.biomate.ai` still pending — **not doable from this access**:
-  `app.biomate.ai` is not in a Route53 zone visible to the `galaxy-dev` creds, so DNS/edge for
-  it is owned elsewhere. The staging deploy is the template; the runbook above applies.
-- **`biomate_session`** (the streaming "primary entry point" tool) still needs Streamable-HTTP
-  progress-notification wiring before it can be enabled on the remote transport.
+- **Prod cutover** to `app.biomate.ai` — **not doable from this access**: `app.biomate.ai` is
+  not in a Route53 zone visible to the `galaxy-dev` creds, so its DNS/edge is owned elsewhere.
+  The staging deploy is the template; the runbook above applies. This is the only open item.
 
 ## Verified (2026-07-04, local)
 

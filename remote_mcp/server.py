@@ -52,7 +52,11 @@ _TOOL_SCOPES: dict[str, str] = {
     "fetch_public_data": "files:upload",
     "recall_memory": "memory:read",
     "upload_file": "files:upload",
+    "biomate_session": "runs:write",  # end-to-end session may start runs
 }
+
+# Tools that stream progress (SSE) rather than returning a single sync result.
+_STREAMING_TOOLS = {"biomate_session"}
 
 # The remote endpoint starts with the read-only, non-streaming trio so the
 # handshake can be proven (step 1) before OAuth + streaming transport land.
@@ -121,6 +125,10 @@ def build_server() -> Server:
                     f"insufficient_scope: '{name}' requires the '{required}' scope"
                 )
         client = _client_for_call()
+
+        if name in _STREAMING_TOOLS:
+            return await _run_streaming(server, client, name, arguments)
+
         # dispatch_tool is synchronous/blocking (requests); run it off the loop.
         result = await anyio.to_thread.run_sync(
             lambda: stdio.dispatch_tool(client, name, arguments)
@@ -129,3 +137,65 @@ def build_server() -> Server:
         return [types.TextContent(type="text", text=text)]
 
     return server
+
+
+async def _run_streaming(
+    server: Server, client, name: str, arguments: dict[str, Any]
+) -> list[types.ContentBlock]:
+    """Run biomate_session's SSE stream, forwarding each event as an MCP progress
+    notification, then return the aggregated final result.
+
+    The connector's ``open_claw_stream`` is a blocking generator (``requests``
+    SSE). We iterate it on a worker thread and bridge each event back to the
+    event loop with ``anyio.from_thread.run`` to emit
+    ``notifications/progress`` on this request's stream. Mirrors the stdio
+    server's SessionRunner, adapted to the SDK session API.
+    """
+    ctx = server.request_context
+    session = ctx.session
+    progress_token = ctx.meta.progressToken if ctx.meta else None
+    related_id = str(ctx.request_id)
+
+    goal = arguments.get("goal") or arguments.get("session_message") or ""
+    inputs = arguments.get("inputs")
+    experiment_id = arguments.get("experiment_id")
+
+    final: dict[str, Any] = {"summary_parts": [], "run_id": None, "view_url": None}
+
+    def _emit(n: int, message: str) -> None:
+        if progress_token is None:
+            return
+        anyio.from_thread.run(
+            session.send_progress_notification,
+            progress_token,
+            float(n),
+            None,          # total (unknown for an open-ended session)
+            message,
+            related_id,
+        )
+
+    def _worker() -> None:
+        n = 0
+        for evt in client.open_claw_stream(goal=goal, inputs=inputs, experiment_id=experiment_id):
+            edata = evt.get("data")
+            if isinstance(edata, dict):
+                if edata.get("run_id"):
+                    final["run_id"] = edata["run_id"]
+                if edata.get("view_url") and not final["view_url"]:
+                    final["view_url"] = edata["view_url"]
+            payload = stdio._normalize_sse_event(evt)
+            if payload is not None:
+                n += 1
+                if payload.get("view_url") and not final["view_url"]:
+                    final["view_url"] = payload["view_url"]
+                if payload.get("kind") == "text_delta":
+                    final["summary_parts"].append(payload.get("summary_md", ""))
+                _emit(n, payload.get("summary_md", ""))
+            if evt.get("event") in ("done", "complete"):
+                break
+
+    await anyio.to_thread.run_sync(_worker)
+
+    summary = " ".join(final["summary_parts"]).strip() or "Session complete."
+    result = {"summary_md": summary, "run_id": final["run_id"], "view_url": final["view_url"]}
+    return [types.TextContent(type="text", text=json.dumps(result, ensure_ascii=False))]
