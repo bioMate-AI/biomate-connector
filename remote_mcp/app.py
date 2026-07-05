@@ -162,7 +162,7 @@ _starlette_app = Starlette(
 )
 
 
-async def app(scope, receive, send) -> None:
+async def _dispatch(scope, receive, send) -> None:
     """Top-level ASGI dispatcher.
 
     ``/mcp`` (with or without a trailing slash) goes straight to the bearer-
@@ -175,3 +175,19 @@ async def app(scope, receive, send) -> None:
         await _guarded_mcp(scope, receive, send)
         return
     await _starlette_app(scope, receive, send)
+
+
+# Browser-based MCP clients (MCP Inspector, some connector flows) fetch discovery
+# + do token exchange cross-origin, and send CORS preflights. Preflight must NOT
+# require a bearer, so CORS wraps the whole app (above the /mcp guard). Bearer
+# auth carries no cookies, so a wildcard origin is safe (no credentials mode).
+from starlette.middleware.cors import CORSMiddleware  # noqa: E402
+
+app = CORSMiddleware(
+    _dispatch,
+    allow_origins=["*"],
+    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+    allow_headers=["*"],
+    expose_headers=["WWW-Authenticate", "Mcp-Session-Id", "mcp-protocol-version"],
+    max_age=600,
+)
