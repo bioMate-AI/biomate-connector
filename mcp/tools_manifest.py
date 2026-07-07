@@ -133,7 +133,7 @@ TOOL_SCHEMAS: List[ToolSchema] = [
                         "Use this to pass: S3 keys from upload_file, sequences, SMILES lists, "
                         "accession numbers, or explicit parameter overrides. "
                         "Examples:\n"
-                        "  After upload_file: {\"fastq_file\": \"s3://biomate-uploads/u42/sample.fastq.gz\"}\n"
+                        "  After upload_file: {\"fastq_file\": \"users/42/uploads/uuid-sample.fastq.gz\"} (use the s3_key value returned by upload_file)\n"
                         "  SMILES list: {\"smiles_list\": [\"CC(=O)Oc1ccccc1C(=O)O\"], \"organism\": \"human\"}\n"
                         "  Parameter override: {\"genome\": \"GRCh38\", \"aligner\": \"STAR\", \"fdr\": 0.05}"
                     ),
@@ -586,14 +586,14 @@ TOOL_SCHEMAS: List[ToolSchema] = [
             "**Returns** `{upload_url, s3_key}` — two fields:\n"
             "- `upload_url`: a presigned HTTPS URL. You MUST upload the file bytes to it with an "
             "HTTP PUT before calling any other tool: `curl -X PUT -T <local_path> \"<upload_url>\"`\n"
-            "- `s3_key`: the stable S3 URI (e.g. `s3://biomate-uploads/user42/sample.fastq.gz`). "
-            "Pass this as a value in the `inputs` dict of `biomate_session` or as a `params` value "
-            "in `run_workflow` — e.g. `inputs={\"fastq_file\": s3_key}` or "
-            "`params={\"input\": s3_key}`.\n\n"
+            "- `s3_key`: a bare S3 object key (e.g. `users/42/uploads/uuid-sample.fastq.gz`). "
+            "Pass this value directly into the `inputs` dict of `biomate_session` or as a `params` "
+            "value in `run_workflow` — BioMate resolves the bucket internally. "
+            "Example: `inputs={\"fastq_file\": s3_key}` or `params={\"input\": s3_key}`.\n\n"
             "**Full upload workflow:**\n"
             "1. `upload_file(filename='sample.fastq.gz', size_bytes=52000000)` → get `upload_url` + `s3_key`\n"
             "2. `curl -X PUT -T sample.fastq.gz \"<upload_url>\"` (or equivalent HTTP PUT — no auth header needed)\n"
-            "3. `biomate_session(goal='Run RNA-seq DE…', inputs={\"fastq_file\": s3_key})`"
+            "3. `biomate_session(goal='Run RNA-seq DE on the uploaded FASTQs, human GRCh38', inputs={\"fastq_file\": s3_key})`"
         ),
         input_schema={
             "type": "object",
