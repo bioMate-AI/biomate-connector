@@ -241,6 +241,27 @@ TOOL_SCHEMAS: List[ToolSchema] = [
         open_world_hint=True,
     ),
     ToolSchema(
+        name="watch_run",
+        tier="workflow",
+        description=(
+            "Stream real-time progress for a running BioMate workflow and return full results when done. "
+            "Emits MCP notifications/progress for every phase start/complete, step update, and QC gate. "
+            "When the run finishes, automatically fetches output files (with download URLs) and AI findings. "
+            "Use after run_workflow (non-streaming) to watch a submitted run. "
+            "Does not require re-submitting — takes an existing run_id."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "run_id": {"type": "string", "description": "Run ID returned by run_workflow."},
+            },
+            "required": ["run_id"],
+        },
+        backend_path="/api/workflows/runs/{run_id}",
+        backend_method="GET",
+        streaming=True,
+    ),
+    ToolSchema(
         name="get_run",
         tier="workflow",
         description=(

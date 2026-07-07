@@ -895,11 +895,31 @@ class SessionRunner(threading.Thread):
             ename = evt.get("event", "")
             edata = evt.get("data")
             if isinstance(edata, dict):
-                # Harvest run_id and view_url from any event that carries them
-                if edata.get("run_id"):
-                    self._final_run_id = edata["run_id"]
-                if edata.get("view_url"):
-                    self._final_view_url = self._final_view_url or edata["view_url"]
+                # Harvest run_id — check top-level (snake_case) and nested result
+                # (tool_result events carry { name, result: { runId: ... } })
+                rid = edata.get("run_id") or edata.get("runId")
+                if not rid:
+                    inner = edata.get("result")
+                    if isinstance(inner, dict):
+                        rid = inner.get("runId") or inner.get("run_id") or inner.get("id")
+                if rid:
+                    self._final_run_id = str(rid)
+
+                # Harvest view_url from top-level or nested result
+                view_url = edata.get("view_url")
+                if not view_url:
+                    inner = edata.get("result")
+                    if isinstance(inner, dict):
+                        view_url = inner.get("view_url")
+                if view_url:
+                    self._final_view_url = self._final_view_url or view_url
+
+                # Harvest run_ids list from the terminal "complete" event
+                # (Node.js /api/open-claw/stream emits { iterations, run_ids: [...] })
+                if ename == "complete":
+                    run_ids = edata.get("run_ids") or []
+                    if run_ids and not self._final_run_id:
+                        self._final_run_id = str(run_ids[-1])
 
             payload = _normalize_sse_event(evt)
             if payload is not None:
@@ -916,13 +936,278 @@ class SessionRunner(threading.Thread):
             if ename in ("done", "complete"):
                 break
 
+        # ── Post-loop enrichment ──────────────────────────────────────────────
+        # If the loop submitted a workflow run, fetch actual outputs and AI
+        # findings so the MCP client gets structured data, not just narration.
+        outputs_data: Optional[Dict[str, Any]] = None
+        findings_data: Optional[Dict[str, Any]] = None
+
+        run_status: Optional[str] = None
+        if self._final_run_id:
+            try:
+                run_info = self.client.get_run(self._final_run_id, include_findings=True)
+                # Status is nested under execution.status in the /api/workflows/runs/:id response
+                _exec = run_info.get("execution") or {}
+                run_status = _exec.get("status") or run_info.get("status") or ""
+                if run_status == "completed":
+                    outputs_data = self.client.get_run_results(self._final_run_id)
+                    # Use embedded findings if present, otherwise call analyze_results
+                    embedded = run_info.get("findings") or run_info.get("analysis")
+                    if embedded:
+                        findings_data = embedded if isinstance(embedded, dict) else {"findings": embedded}
+                    else:
+                        findings_data = self.client.analyze_results(
+                            self._final_run_id,
+                            "Summarize key quantitative findings, QC metrics, and output files.",
+                        )
+            except Exception as exc:
+                log.warning(f"Post-loop result fetch failed for run {self._final_run_id}: {exc}")
+
         # ── Final tools/call response ─────────────────────────────────────────
         summary = " ".join(self._final_summary_md).strip() or "Session complete."
         result_payload: Dict[str, Any] = {
             "summary_md": summary,
             "run_id": self._final_run_id,
+            "run_status": run_status,
             "view_url": self._final_view_url,
         }
+        # outputs_data may be a list (get_run_results returns bare array)
+        if outputs_data and not (isinstance(outputs_data, dict) and outputs_data.get("error")):
+            result_payload["outputs"] = outputs_data
+        if findings_data and not (isinstance(findings_data, dict) and findings_data.get("error")):
+            result_payload["findings"] = findings_data
+
+        send(make_response(self.req_id, {
+            "content": [{"type": "text", "text": json.dumps(result_payload, indent=2)}],
+            "isError": False,
+        }))
+
+
+class WatchRunRunner(threading.Thread):
+    """Stream workflow events for a submitted run and emit MCP notifications/progress.
+
+    Used by:
+      - run_workflow  (stream=true)  — submits the job first, then watches it
+      - watch_run                    — watches an already-submitted run by ID
+
+    Does NOT require an Anthropic API key — streams directly from
+    /api/workflows/:invocationId/events (Galaxy SSE relay) and
+    /api/workflows/runs/:id (status + outputs polling).
+    """
+
+    POLL_INTERVAL = 8   # seconds between status polls when SSE stalls
+
+    def __init__(
+        self,
+        client: "BioMateClient",
+        req_id: Any,
+        tool_name: str,
+        tool_args: Dict[str, Any],
+        progress_token: Optional[Any],
+    ):
+        super().__init__(daemon=True)
+        self.client = client
+        self.req_id = req_id
+        self.tool_name = tool_name
+        self.tool_args = tool_args
+        self.progress_token = progress_token
+
+    def _emit_progress(self, payload: Dict[str, Any], n: int) -> None:
+        if self.progress_token is None:
+            return
+        params: Dict[str, Any] = {
+            "progressToken": self.progress_token,
+            "progress": n,
+            "total": None,
+            **payload,
+        }
+        send({"jsonrpc": "2.0", "method": "notifications/progress", "params": params})
+
+    def run(self) -> None:
+        try:
+            self._run_impl()
+        except Exception:
+            log.exception(f"WatchRunRunner error for {self.tool_name}")
+
+    def _run_impl(self) -> None:
+        # ── 1. Submit job (run_workflow) or use existing run_id (watch_run) ──
+        run_id: Optional[str] = None
+        invocation_id: Optional[str] = None
+        view_url: Optional[str] = None
+        n = 0
+
+        if self.tool_name == "run_workflow":
+            submit_result = self.client.run_workflow(
+                workflow_id=self.tool_args["workflow_id"],
+                params=self.tool_args.get("params", {}),
+                session_message=self.tool_args.get("session_message"),
+            )
+            if submit_result.get("error") is True or submit_result.get("error"):
+                send(make_response(self.req_id, {
+                    "content": [{"type": "text", "text": json.dumps(submit_result, indent=2)}],
+                    "isError": True,
+                }))
+                return
+            run_id = (submit_result.get("runId") or submit_result.get("run_id")
+                      or submit_result.get("id"))
+            invocation_id = (submit_result.get("runInvocationId")
+                             or submit_result.get("invocationId")
+                             or submit_result.get("pipelineRunId")
+                             or run_id)
+            view_url = submit_result.get("view_url")
+            n += 1
+            self._emit_progress({
+                "kind": "run_submitted",
+                "summary_md": f"**Run submitted** — `{run_id}`",
+                "run_id": run_id,
+                "view_url": view_url,
+            }, n)
+        else:
+            # watch_run: run_id is provided directly
+            run_id = self.tool_args.get("run_id") or self.tool_args.get("run_id")
+            invocation_id = run_id
+
+        if not run_id:
+            send(make_response(self.req_id, {
+                "content": [{"type": "text", "text": json.dumps({"error": "No run_id resolved"})}],
+                "isError": True,
+            }))
+            return
+
+        # ── 1b. Fast-path: if run already terminal, skip SSE entirely ──────────
+        try:
+            quick = self.client.get_run_status(run_id)
+            quick_status = (quick.get("status")
+                            or quick.get("execution", {}).get("status", ""))
+            if quick_status in ("completed", "failed", "cancelled", "error"):
+                n += 1
+                self._emit_progress({
+                    "kind": "poll",
+                    "summary_md": f"Run already terminal: `{quick_status}`",
+                    "run_status": quick_status,
+                }, n)
+                # Jump straight to post-run enrichment
+                run_status = quick_status
+                outputs_data: Optional[Dict[str, Any]] = None
+                findings_data: Optional[Dict[str, Any]] = None
+                try:
+                    run_info = self.client.get_run(run_id, include_findings=True)
+                    if run_status == "completed":
+                        outputs_data = self.client.get_run_results(run_id)
+                        embedded = run_info.get("findings") or run_info.get("analysis")
+                        if embedded:
+                            findings_data = embedded if isinstance(embedded, dict) else {"findings": embedded}
+                        else:
+                            findings_data = self.client.analyze_results(
+                                run_id,
+                                "Summarize key quantitative findings, QC metrics, and output files.",
+                            )
+                except Exception as exc:
+                    log.warning(f"WatchRunRunner fast-path enrichment failed: {exc}")
+                result_payload: Dict[str, Any] = {
+                    "run_id": run_id, "run_status": run_status, "view_url": view_url,
+                }
+                # outputs_data may be a list (get_run_results returns bare array)
+                has_outputs_err = isinstance(outputs_data, dict) and outputs_data.get("error")
+                if outputs_data and not has_outputs_err:
+                    result_payload["outputs"] = outputs_data
+                has_findings_err = isinstance(findings_data, dict) and findings_data.get("error")
+                if findings_data and not has_findings_err:
+                    result_payload["findings"] = findings_data
+                send(make_response(self.req_id, {
+                    "content": [{"type": "text", "text": json.dumps(result_payload, indent=2)}],
+                    "isError": False,
+                }))
+                return
+        except Exception as exc:
+            log.warning(f"WatchRunRunner fast-path status check failed: {exc}")
+
+        # ── 2. Stream workflow events (SSE) ────────────────────────────────────
+        # Falls back to polling if the SSE endpoint returns no terminal event
+        # within the first POLL_INTERVAL seconds (e.g. older runs whose events
+        # stream has already closed).
+        terminal_seen = False
+        try:
+            for evt in self.client.workflow_events_stream(invocation_id):
+                ename = evt.get("event", "")
+                payload = _normalize_sse_event(evt)
+                if payload:
+                    n += 1
+                    self._emit_progress(payload, n)
+                # Terminal events from the workflow events stream
+                if ename in ("done", "complete", "workflow_completed",
+                             "workflow_failed", "workflow_cancelled"):
+                    terminal_seen = True
+                    break
+                # chat_progress with terminal kind
+                edata = evt.get("data") or {}
+                if isinstance(edata, dict):
+                    kind = edata.get("kind", "")
+                    if kind in ("workflow.completed", "workflow.failed", "workflow.cancelled"):
+                        terminal_seen = True
+                        break
+        except Exception as exc:
+            log.warning(f"WatchRunRunner SSE stalled for {run_id}: {exc}")
+
+        # ── 3. Poll to terminal if SSE didn't deliver a terminal event ─────────
+        if not terminal_seen:
+            for _ in range(120):  # up to ~16 min at POLL_INTERVAL=8s
+                time.sleep(self.POLL_INTERVAL)
+                try:
+                    status_info = self.client.get_run_status(run_id)
+                    status = (status_info.get("status")
+                              or status_info.get("execution", {}).get("status", ""))
+                    prog = status_info.get("progress") or {}
+                    n += 1
+                    self._emit_progress({
+                        "kind": "poll",
+                        "summary_md": (
+                            f"Polling… status=`{status}` "
+                            f"({prog.get('completedSteps', 0)}/{prog.get('totalSteps', '?')} steps)"
+                        ),
+                        "run_status": status,
+                        "progress": prog,
+                    }, n)
+                    if status in ("completed", "failed", "cancelled", "error"):
+                        break
+                except Exception as poll_exc:
+                    log.warning(f"WatchRunRunner poll failed: {poll_exc}")
+
+        # ── 4. Post-run enrichment — outputs + findings ────────────────────────
+        outputs_data: Optional[Dict[str, Any]] = None
+        findings_data: Optional[Dict[str, Any]] = None
+        run_status: Optional[str] = None
+
+        try:
+            run_info = self.client.get_run(run_id, include_findings=True)
+            _exec = run_info.get("execution") or {}
+            run_status = _exec.get("status") or run_info.get("status") or ""
+            if run_status == "completed":
+                outputs_data = self.client.get_run_results(run_id)
+                embedded = run_info.get("findings") or run_info.get("analysis")
+                if embedded:
+                    findings_data = embedded if isinstance(embedded, dict) else {"findings": embedded}
+                else:
+                    findings_data = self.client.analyze_results(
+                        run_id,
+                        "Summarize key quantitative findings, QC metrics, and output files.",
+                    )
+        except Exception as exc:
+            log.warning(f"WatchRunRunner post-run enrichment failed for {run_id}: {exc}")
+
+        # ── 5. Final response ──────────────────────────────────────────────────
+        result_payload: Dict[str, Any] = {
+            "run_id": run_id,
+            "run_status": run_status,
+            "view_url": view_url,
+        }
+        # outputs_data may be a list (get_run_results returns bare array)
+        has_outputs_err = isinstance(outputs_data, dict) and outputs_data.get("error")
+        if outputs_data and not has_outputs_err:
+            result_payload["outputs"] = outputs_data
+        has_findings_err = isinstance(findings_data, dict) and findings_data.get("error")
+        if findings_data and not has_findings_err:
+            result_payload["findings"] = findings_data
 
         send(make_response(self.req_id, {
             "content": [{"type": "text", "text": json.dumps(result_payload, indent=2)}],
@@ -1028,7 +1313,7 @@ def dispatch_tool(client: BioMateClient, tool_name: str, args: Dict[str, Any]) -
 
 
 # Tools that emit notifications/progress instead of a single sync result.
-_STREAMING_TOOLS = {"biomate_session", "run_workflow"}
+_STREAMING_TOOLS = {"biomate_session", "run_workflow", "watch_run"}
 
 
 def is_streaming_call(tool_name: str, tool_args: Dict[str, Any]) -> bool:
@@ -1036,6 +1321,8 @@ def is_streaming_call(tool_name: str, tool_args: Dict[str, Any]) -> bool:
         return bool(tool_args.get("stream", True))
     if tool_name == "run_workflow":
         return bool(tool_args.get("stream", False))
+    if tool_name == "watch_run":
+        return True
     return False
 
 
@@ -1097,7 +1384,13 @@ def handle_request(client: BioMateClient, msg: Dict[str, Any]) -> Optional[Dict[
         # Streaming tools: spawn a worker that emits notifications/progress and
         # sends the final tools/call response itself. Main loop returns None.
         if is_streaming_call(tool_name, tool_args):
-            runner = SessionRunner(client, req_id, tool_name, tool_args, progress_token)
+            # watch_run and run_workflow(stream=True) use WatchRunRunner —
+            # streams workflow events directly, no Anthropic API key needed.
+            # biomate_session uses SessionRunner (open-claw agentic loop).
+            if tool_name in ("watch_run",) or (tool_name == "run_workflow" and tool_args.get("stream")):
+                runner: threading.Thread = WatchRunRunner(client, req_id, tool_name, tool_args, progress_token)
+            else:
+                runner = SessionRunner(client, req_id, tool_name, tool_args, progress_token)
             runner.start()
             return None
 
