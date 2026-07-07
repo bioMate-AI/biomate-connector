@@ -127,9 +127,15 @@ TOOL_SCHEMAS: List[ToolSchema] = [
                 "inputs": {
                     "type": "object",
                     "description": (
-                        "Optional structured inputs (S3 keys, sequences, SMILES, parameter overrides). "
-                        "BioMate merges these with what it extracts from `goal`. "
-                        "Example: {\"smiles_list\": [\"CC(=O)Oc1ccccc1C(=O)O\"], \"organism\": \"human\"}"
+                        "Optional structured inputs passed alongside `goal`. "
+                        "BioMate's inner AI sees these as a JSON block appended to the goal text "
+                        "and merges them with any parameters it extracts from the goal string. "
+                        "Use this to pass: S3 keys from upload_file, sequences, SMILES lists, "
+                        "accession numbers, or explicit parameter overrides. "
+                        "Examples:\n"
+                        "  After upload_file: {\"fastq_file\": \"s3://biomate-uploads/u42/sample.fastq.gz\"}\n"
+                        "  SMILES list: {\"smiles_list\": [\"CC(=O)Oc1ccccc1C(=O)O\"], \"organism\": \"human\"}\n"
+                        "  Parameter override: {\"genome\": \"GRCh38\", \"aligner\": \"STAR\", \"fdr\": 0.05}"
                     ),
                     "additionalProperties": True,
                 },
@@ -575,9 +581,19 @@ TOOL_SCHEMAS: List[ToolSchema] = [
         tier="analysis",
         description=(
             "Get a one-shot signed S3 PUT URL so the host can upload a local file directly to "
-            "BioMate's data plane without proxying bytes through the chat transport. Returns "
-            "the s3_key to use in subsequent tool calls. For files >5MB this is mandatory; for "
-            "small text payloads, inline strings are fine."
+            "BioMate's data plane without proxying bytes through the chat transport. "
+            "For files >5MB this is mandatory; for small text payloads, inline strings are fine.\n\n"
+            "**Returns** `{upload_url, s3_key}` — two fields:\n"
+            "- `upload_url`: a presigned HTTPS URL. You MUST upload the file bytes to it with an "
+            "HTTP PUT before calling any other tool: `curl -X PUT -T <local_path> \"<upload_url>\"`\n"
+            "- `s3_key`: the stable S3 URI (e.g. `s3://biomate-uploads/user42/sample.fastq.gz`). "
+            "Pass this as a value in the `inputs` dict of `biomate_session` or as a `params` value "
+            "in `run_workflow` — e.g. `inputs={\"fastq_file\": s3_key}` or "
+            "`params={\"input\": s3_key}`.\n\n"
+            "**Full upload workflow:**\n"
+            "1. `upload_file(filename='sample.fastq.gz', size_bytes=52000000)` → get `upload_url` + `s3_key`\n"
+            "2. `curl -X PUT -T sample.fastq.gz \"<upload_url>\"` (or equivalent HTTP PUT — no auth header needed)\n"
+            "3. `biomate_session(goal='Run RNA-seq DE…', inputs={\"fastq_file\": s3_key})`"
         ),
         input_schema={
             "type": "object",
