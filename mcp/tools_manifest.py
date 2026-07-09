@@ -427,26 +427,35 @@ TOOL_SCHEMAS: List[ToolSchema] = [
         name="query_database",
         tier="analysis",
         description=(
-            "Query a biological/chemical database by accession or name. Supported: "
-            "uniprot, pdb, alphafold, ncbi_gene, dbsnp, clinvar, gnomad, kegg, reactome, "
-            "chebi, chembl, hpo, string, pubmed."
+            "Query a biological/chemical database by accession or name. "
+            "Use database='federated' to fan out across all sources simultaneously and merge results. "
+            "Single-source options: uniprot, pdb, alphafold, ncbi_gene, dbsnp, clinvar, gnomad, "
+            "kegg, reactome, chebi, chembl, hpo, string, pubmed."
         ),
         input_schema={
             "type": "object",
             "properties": {
                 "database": {
                     "type": "string",
+                    "description": "Database to query. Use 'federated' to query all sources in parallel.",
                     "enum": [
+                        "federated",
                         "uniprot", "pdb", "alphafold", "ncbi_gene",
                         "dbsnp", "clinvar", "gnomad",
                         "kegg", "reactome",
                         "chebi", "chembl",
                         "hpo", "string", "pubmed",
                     ],
+                    "default": "federated",
                 },
-                "query": {"type": "string", "description": "Accession, gene symbol, or compound name."},
+                "query": {"type": "string", "description": "Accession, gene symbol, compound name, or free text."},
+                "entity_type": {
+                    "type": "string",
+                    "description": "Hint for federated routing: gene, protein, variant, compound, pathway, disease, or omit to auto-detect.",
+                    "enum": ["gene", "protein", "variant", "compound", "pathway", "disease"],
+                },
             },
-            "required": ["database", "query"],
+            "required": ["query"],
         },
         backend_path="/api/databases/query",
         title="Query Biological Database",
@@ -575,6 +584,45 @@ TOOL_SCHEMAS: List[ToolSchema] = [
         backend_path="/api/memory/relevant",
         title="Recall Memory",
         read_only_hint=True,
+    ),
+    ToolSchema(
+        name="search_literature",
+        tier="analysis",
+        description=(
+            "Search published scientific literature across PubMed, EuropePMC, Semantic Scholar, "
+            "and OpenAlex. Uses an iterative depth-loop: starts broad, then drills into related "
+            "topics until min_results are found or max_depth is reached. Returns ranked papers "
+            "with title, authors, year, DOI, abstract snippet, and citation count. "
+            "Best for: finding prior art, understanding a disease mechanism, locating validation "
+            "datasets, or reviewing methods before running a workflow."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": (
+                        "Natural-language search query. Be specific: include organism, "
+                        "assay type, or drug name. E.g. 'DESeq2 bulk RNA-seq breast cancer ER+ 2020-2024'."
+                    ),
+                },
+                "max_depth": {
+                    "type": "integer",
+                    "default": 2,
+                    "description": "How many iterative refinement rounds to run (1–4). Higher = more thorough, slower.",
+                },
+                "min_results": {
+                    "type": "integer",
+                    "default": 10,
+                    "description": "Stop when at least this many papers are found.",
+                },
+            },
+            "required": ["query"],
+        },
+        backend_path="/api/literature/search",
+        title="Search Literature",
+        read_only_hint=True,
+        open_world_hint=True,
     ),
     ToolSchema(
         name="upload_file",

@@ -46,6 +46,7 @@ _TOOL_SCOPES: dict[str, str] = {
     "export_report": "reports:export",
     "analyze_results": "runs:read",
     "explain_error": "runs:read",
+    "search_literature": "workflows:search",
     "query_database": "workflows:search",
     "resolve_accession": "workflows:search",
     "browse_data": "workflows:search",
