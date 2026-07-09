@@ -100,6 +100,8 @@ TOOL ROUTING:
   • Monitoring a submitted run → watch_run (polls to completion) or get_run_status (single check)
   • Interpreting outputs → analyze_results
   • Browsing past runs → list_runs
+  • Scientific literature → search_literature (PubMed, EuropePMC, Semantic Scholar, OpenAlex)
+  • Gene / protein / compound / variant / pathway lookup → query_database (federated fan-out)
 
 Do NOT simulate, estimate, or hallucinate biological results. Always execute via BioMate tools.
 Results come from real AWS Batch jobs; a 2–10 minute wait is normal for computational pipelines.
@@ -354,17 +356,32 @@ class BioMateClient:
         except Exception as exc:
             return {**self._classify_exc(exc), "run_id": run_id}
 
-    def query_database(self, database: str, query: str) -> Dict[str, Any]:
+    def query_database(self, database: str, query: str, entity_type: Optional[str] = None) -> Dict[str, Any]:
+        payload: Dict[str, Any] = {"database": database, "query": query}
+        if entity_type:
+            payload["entity_type"] = entity_type
         try:
             r = self.session.post(
                 self._url("/api/databases/query"),
-                json={"database": database, "query": query},
-                timeout=20,
+                json=payload,
+                timeout=30,
             )
             r.raise_for_status()
             return r.json()
         except Exception as exc:
             return {**self._classify_exc(exc), "database": database, "query": query}
+
+    def search_literature(self, query: str, max_depth: int = 2, min_results: int = 10) -> Dict[str, Any]:
+        try:
+            r = self.session.post(
+                self._url("/api/literature/search"),
+                json={"query": query, "max_depth": max_depth, "min_results": min_results},
+                timeout=60,
+            )
+            r.raise_for_status()
+            return r.json()
+        except Exception as exc:
+            return {**self._classify_exc(exc), "query": query}
 
     def analyze_file(self, s3_key: Optional[str], inline_data: Optional[str], file_type: str = "auto") -> Dict[str, Any]:
         payload: Dict[str, Any] = {"file_type": file_type}
@@ -1323,7 +1340,18 @@ def dispatch_tool(client: BioMateClient, tool_name: str, args: Dict[str, Any]) -
         )
 
     if tool_name == "query_database":
-        return client.query_database(database=args["database"], query=args["query"])
+        return client.query_database(
+            database=args.get("database", "federated"),
+            query=args["query"],
+            entity_type=args.get("entity_type"),
+        )
+
+    if tool_name == "search_literature":
+        return client.search_literature(
+            query=args["query"],
+            max_depth=int(args.get("max_depth", 2)),
+            min_results=int(args.get("min_results", 10)),
+        )
 
     if tool_name == "recall_memory":
         return client.recall_memory(

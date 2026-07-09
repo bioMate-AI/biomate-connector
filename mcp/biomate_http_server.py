@@ -202,6 +202,40 @@ def _build_mcp(host: str, port: int) -> FastMCP:
         """Cancel a running or pending workflow run on AWS Batch."""
         return _client().cancel_run(run_id=run_id)
 
+    @mcp.tool()
+    async def search_literature(
+        query: str,
+        max_depth: int = 2,
+        min_results: int = 10,
+    ) -> Dict[str, Any]:
+        """Search scientific literature across PubMed, EuropePMC, Semantic Scholar, and OpenAlex.
+        Uses an iterative depth loop: searches all sources in parallel, detects gaps, refines
+        the query, and deepens until min_results are collected or max_depth is reached.
+        Returns papers with titles, authors, abstracts, DOIs, and citation counts."""
+        return _client().search_literature(
+            query=query,
+            max_depth=max_depth,
+            min_results=min_results,
+        )
+
+    @mcp.tool()
+    async def query_database(
+        query: str,
+        database: str = "federated",
+        entity_type: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Query biological databases for structured knowledge.
+        database="federated" (default) fans out to all relevant sources in parallel:
+        UniProt, PDB, NCBI Gene, Ensembl, ChEMBL, ClinVar, gnomAD, KEGG, Reactome,
+        EuropePMC, Semantic Scholar, OpenAlex, and more.
+        entity_type hints: gene, protein, compound, variant, pathway, structure, disease, literature.
+        Results are cached (24h for stable data, 1h for literature)."""
+        return _client().query_database(
+            database=database,
+            query=query,
+            entity_type=entity_type,
+        )
+
     return mcp
 
 
