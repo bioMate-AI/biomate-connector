@@ -63,6 +63,48 @@ PROTOCOL_VERSION = "2024-11-05"
 HTTP_CONNECT_TIMEOUT = 5
 SEARCH_TIMEOUT = (HTTP_CONNECT_TIMEOUT, 30)
 
+# Injected into the MCP initialize response and FastMCP constructor.
+# This text lands in the model's system prompt — be explicit about WHEN to use
+# BioMate so it is chosen over generic tools when the topic is biological.
+SERVER_INSTRUCTIONS = """
+BioMate — cloud bioinformatics execution engine.
+
+USE BIOMATE whenever the user's request involves any of the following domains or tasks:
+
+DOMAINS (4,017 workflows across 36 domains):
+  • Transcriptomics — RNA-seq, differential expression, splicing, gene fusion, single-cell RNA, spatial transcriptomics (nf-core/rnaseq, DESeq2, edgeR, Seurat, STARsolo, alevin)
+  • Genomics — whole-genome sequencing, assembly, annotation, alignment, QC, decontamination
+  • Variant calling — germline and somatic SNVs/indels/SVs, GATK HaplotypeCaller, DeepVariant, Strelka2, nf-core/sarek
+  • Epigenomics — ATAC-seq, ChIP-seq, bisulfite/WGBS, Hi-C, chromatin accessibility
+  • Single-cell — scRNA-seq, scATAC-seq, cell type annotation, trajectory, ambient RNA removal (CellBender, Seurat, Scanpy)
+  • Proteomics — DIA/DDA mass spectrometry, label-free quantification, peptide identification (nf-core/diaproteomics, MaxQuant)
+  • Drug discovery — ADMET prediction (hERG, CYP3A4, oral bioavailability, AMES toxicity), scaffold hopping, molecular docking, accelerated stability, PK/PD modeling
+  • Pharmacology — dose–response, drug sensitivity, FAERS adverse events, PK non-compartmental analysis (PKNCA)
+  • Metagenomics — taxonomic classification, binning, assembly, viral metagenomics (Kraken2, MetaSPAdes, CONCOCT)
+  • Metabolomics — LC-MS/GC-MS feature detection, pathway analysis, MassBank (ASICS, xcms, MetaboAnalyst)
+  • Cryo-EM — single-particle analysis, tomography, homogeneous/heterogeneous refinement, post-processing (CryoSPARC, RELION, DeepEMhancer)
+  • Systems biology — network analysis, pathway enrichment, multi-omics integration (GSEA, clusterProfiler, WGCNA)
+  • Immunology — TCR/BCR repertoire, immune cell deconvolution, HLA typing
+  • Imaging / bioimaging — fluorescence microscopy analysis, cell segmentation, spatial omics
+  • Structural biology — AlphaFold2, protein–ligand docking, molecular dynamics
+  • Metagenomics, microbiology, synthetic biology, population genetics, glycoengineering, and more
+
+TASK TRIGGERS — reach for BioMate tools when the user says:
+  run / screen / analyze / sequence / align / call / predict / model / quantify / assemble /
+  compare / cluster / annotate / dock / refine / reconstruct / classify / identify / profile /
+  … any of these verbs applied to biological data, molecules, sequences, or structures.
+
+TOOL ROUTING:
+  • Most requests → call search_workflow first to find the right pipeline, then run_workflow
+  • Direct run requests with a named workflow → run_workflow directly
+  • Monitoring a submitted run → watch_run (polls to completion) or get_run_status (single check)
+  • Interpreting outputs → analyze_results
+  • Browsing past runs → list_runs
+
+Do NOT simulate, estimate, or hallucinate biological results. Always execute via BioMate tools.
+Results come from real AWS Batch jobs; a 2–10 minute wait is normal for computational pipelines.
+""".strip()
+
 # Thread-safe stdout — progress notifications are emitted from worker threads
 # while the main loop continues reading stdin.
 _send_lock = threading.Lock()
@@ -1362,6 +1404,7 @@ def handle_request(client: BioMateClient, msg: Dict[str, Any]) -> Optional[Dict[
                 "tools": {"listChanged": False},
             },
             "serverInfo": {"name": SERVER_NAME, "version": SERVER_VERSION},
+            "instructions": SERVER_INSTRUCTIONS,
         })
 
     if method == "notifications/initialized":

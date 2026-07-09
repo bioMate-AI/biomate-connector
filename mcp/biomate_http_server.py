@@ -36,7 +36,7 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from biomate_mcp_server import BioMateClient  # noqa: E402
+from biomate_mcp_server import BioMateClient, SERVER_INSTRUCTIONS  # noqa: E402
 
 log = logging.getLogger("biomate_http")
 
@@ -89,12 +89,7 @@ def _client() -> BioMateClient:
 def _build_mcp(host: str, port: int) -> FastMCP:
     mcp = FastMCP(
         "biomate",
-        instructions=(
-            "BioMate scientific workflow platform — 2,455+ bioinformatics pipelines across "
-            "34 domains (genomics, transcriptomics, drug discovery, cryo-EM, proteomics, …). "
-            "Use run_workflow to submit a pipeline, watch_run to track it to completion, "
-            "and analyze_results for AI-powered interpretation of outputs."
-        ),
+        instructions=SERVER_INSTRUCTIONS,
         host=host,
         port=port,
     )
