@@ -1325,6 +1325,94 @@ class WatchRunRunner(threading.Thread):
 # Tool dispatcher
 # ──────────────────────────────────────────────────────────────────────────────
 
+def _load_opentrons():
+    """Lazily import the OpenTrons connector from the sibling lab_instruments
+    package. Kept lazy so the MCP server has no hard dependency on lab-hardware
+    libraries unless an instrument tool is actually called."""
+    import sys
+    li = os.path.join(os.path.dirname(__file__), "..", "lab_instruments")
+    if li not in sys.path:
+        sys.path.insert(0, li)
+    from opentrons_connector import OpenTronsConnector  # type: ignore  # noqa: E402
+    return OpenTronsConnector
+
+
+def dispatch_instrument_tool(tool_name: str, args: Dict[str, Any]) -> Any:
+    """Local-only dispatch for lab-instrument tools.
+
+    These do NOT proxy to the cloud backend: a robot lives on the lab's private
+    LAN that the cloud cannot reach, but this MCP server runs locally and can.
+    `run_instrument_protocol` is guarded — confirm=false (the default) returns a
+    dry-run preview and NEVER actuates hardware.
+    """
+    OpenTronsConnector = _load_opentrons()
+
+    if tool_name == "list_instruments":
+        robots = OpenTronsConnector.discover(args.get("ips"))
+        out: List[Dict[str, Any]] = []
+        for r in robots:
+            try:
+                out.append({"robot_ip": r.robot_ip, **r.health_check()})
+            except Exception as e:  # unreachable mid-scan
+                out.append({"robot_ip": r.robot_ip, "error": str(e)})
+        return {"instruments": out, "count": len(out)}
+
+    robot_ip = args.get("robot_ip")
+    if not robot_ip:
+        raise ValueError("robot_ip is required")
+    conn = OpenTronsConnector(robot_ip)
+
+    if tool_name == "get_instrument_status":
+        return conn.get_run_status(args["run_id"])
+
+    if tool_name == "run_instrument_protocol":
+        code = args.get("protocol_code")
+        if not code and args.get("transfers"):
+            missing = [k for k in ("source_labware", "dest_labware") if not args.get(k)]
+            if missing:
+                raise ValueError(
+                    f"A `transfers` spec also requires {', '.join(missing)}."
+                )
+            code = OpenTronsConnector.generate_plate_transfer_protocol(
+                source_labware=args["source_labware"],
+                dest_labware=args["dest_labware"],
+                pipette=args.get("pipette", "p300_single_gen2"),
+                transfers=args["transfers"],
+            )
+        if not code:
+            raise ValueError(
+                "Provide either `protocol_code` or a `transfers` spec "
+                "(with source_labware and dest_labware)."
+            )
+        # Guardrail: dry-run is a pure offline preview (no hardware needed) so the
+        # protocol can be reviewed before any actuation. Reachability is verified
+        # only on the confirm=true path, immediately before actuating.
+        if not args.get("confirm", False):
+            return {
+                "dry_run": True,
+                "robot_ip": robot_ip,
+                "protocol_preview": code,
+                "message": (
+                    "DRY RUN — nothing was actuated. Review the protocol above, then call "
+                    "run_instrument_protocol again with confirm=true to physically run it."
+                ),
+            }
+        health = conn.health_check()  # verify reachable immediately before actuating
+        robot_name = health.get("name", robot_ip)
+        protocol_id = conn.upload_protocol(code, args.get("protocol_name", "biomate_protocol.py"))
+        run_id = conn.start_run(protocol_id)
+        return {
+            "robot": robot_name,
+            "robot_ip": robot_ip,
+            "protocol_id": protocol_id,
+            "run_id": run_id,
+            "status": "running",
+            "message": f"Protocol running on {robot_name}. Poll get_instrument_status with run_id={run_id}.",
+        }
+
+    raise ValueError(f"Unknown instrument tool: {tool_name}")
+
+
 def dispatch_tool(client: BioMateClient, tool_name: str, args: Dict[str, Any]) -> Any:
     """Execute a non-streaming tool call. Returns JSON-serializable result.
 
@@ -1332,6 +1420,12 @@ def dispatch_tool(client: BioMateClient, tool_name: str, args: Dict[str, Any]) -
     dispatched via SessionRunner from handle_request — they do not flow
     through this function.
     """
+    # Local-only instrument tools dispatch inside this process (see
+    # dispatch_instrument_tool) — the cloud backend cannot reach a robot on the
+    # lab's private LAN.
+    if tool_name in ("list_instruments", "get_instrument_status", "run_instrument_protocol"):
+        return dispatch_instrument_tool(tool_name, args)
+
     if tool_name == "search_workflow":
         return client.search_workflow(query=args["query"], limit=int(args.get("limit", 5)))
 

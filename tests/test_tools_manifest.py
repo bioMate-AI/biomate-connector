@@ -20,9 +20,26 @@ from mcp import biomate_mcp_server as srv
 # Manifest schema
 # ──────────────────────────────────────────────────────────────────────────────
 
-def test_manifest_has_all_three_tiers():
+def test_manifest_has_expected_tiers():
     tiers = {t.tier for t in tm.TOOL_SCHEMAS}
-    assert tiers == {"agentic", "workflow", "analysis"}
+    assert tiers == {"agentic", "workflow", "analysis", "instrument"}
+    # instrument-tier tools are local-only (dispatched in-process, not proxied
+    # to the cloud backend which cannot reach a robot on the lab LAN).
+    assert all(t.local_only for t in tm.TOOL_SCHEMAS if t.tier == "instrument")
+
+
+def test_local_only_tools_in_mcp_but_not_cloud():
+    """local_only instrument tools are exposed over local MCP only — never on
+    the cloud surfaces (ChatGPT / Open Claw), which cannot reach the hardware."""
+    mcp_names = {t["name"] for t in tm.to_mcp()}
+    oai_names = {t["function"]["name"] for t in tm.to_openai()}
+    ant_names = {t["name"] for t in tm.to_anthropic()}
+    local = [t for t in tm.TOOL_SCHEMAS if t.local_only]
+    assert local, "expected at least one local-only instrument tool"
+    for t in local:
+        assert t.name in mcp_names, f"{t.name} should be in the local MCP list"
+        assert t.name not in oai_names, f"{t.name} must not be on the ChatGPT surface"
+        assert t.name not in ant_names, f"{t.name} must not be on the Open Claw surface"
 
 
 def test_manifest_has_streaming_session_tool():
@@ -77,8 +94,11 @@ def test_openai_export_wraps_in_function_type():
 def test_openapi_export_has_path_per_tool():
     spec = tm.to_openapi()
     assert spec["openapi"].startswith("3.1")
-    assert len(spec["paths"]) == len(tm.TOOL_SCHEMAS)
-    for t in tm.TOOL_SCHEMAS:
+    # The cloud HTTP surface exposes every non-local tool (local_only instrument
+    # tools are excluded — the cloud cannot reach lab hardware).
+    cloud_tools = [t for t in tm.TOOL_SCHEMAS if not t.local_only]
+    assert len(spec["paths"]) == len(cloud_tools)
+    for t in cloud_tools:
         path = f"/tools/{t.name}"
         assert path in spec["paths"]
         op = spec["paths"][path]["post"]
@@ -86,6 +106,9 @@ def test_openapi_export_has_path_per_tool():
         assert op["x-streaming"] == t.streaming
         body = op["requestBody"]["content"]["application/json"]["schema"]
         assert body == t.input_schema
+    for t in tm.TOOL_SCHEMAS:
+        if t.local_only:
+            assert f"/tools/{t.name}" not in spec["paths"]
 
 
 def test_openapi_uses_oauth_with_required_scopes():
@@ -113,9 +136,11 @@ def test_manifest_json_round_trips(tmp_path):
     out = tm.build_manifest_json(tmp_path / "m.json")
     payload = json.loads(out.read_text())
     assert payload["version"] == "2.0.0"
+    # MCP (local) carries every tool; the cloud shapes exclude local_only tools.
     assert len(payload["mcp"]) == len(tm.TOOL_SCHEMAS)
-    assert len(payload["anthropic"]) == len(tm.TOOL_SCHEMAS)
-    assert len(payload["openai"]) == len(tm.TOOL_SCHEMAS)
+    cloud_tools = [t for t in tm.TOOL_SCHEMAS if not t.local_only]
+    assert len(payload["anthropic"]) == len(cloud_tools)
+    assert len(payload["openai"]) == len(cloud_tools)
 
 
 def test_committed_manifest_json_in_sync():
@@ -157,10 +182,14 @@ def test_committed_manifest_json_in_sync():
 # Skill catalog
 # ──────────────────────────────────────────────────────────────────────────────
 
-def test_skill_catalog_lists_every_tool():
+def test_skill_catalog_lists_every_cloud_tool():
     md = tm.to_skill_catalog()
     for t in tm.TOOL_SCHEMAS:
-        assert f"`{t.name}`" in md
+        if t.local_only:
+            # local-only instrument tools are not part of the cloud Skill catalog
+            assert f"`{t.name}`" not in md
+        else:
+            assert f"`{t.name}`" in md
 
 
 def test_skill_catalog_marks_streaming_tools():
