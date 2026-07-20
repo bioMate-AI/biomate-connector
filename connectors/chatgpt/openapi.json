@@ -838,7 +838,7 @@
       "post": {
         "operationId": "query_database",
         "summary": "Query a biological/chemical database by accession or name.",
-        "description": "Query a biological/chemical database by accession or name. Use database='federated' to fan out across all sources simultaneously and merge results. Single-source options: uniprot, pdb, alphafold, ncbi_gene, dbsnp, clinvar, gnomad, kegg, reactome, chebi, chembl, hpo, string, pubmed.",
+        "description": "Query a biological/chemical database by accession or name. Use database='federated' to fan out across all sources simultaneously and merge results. Single-source options: uniprot, pdb, pdbe, alphafold, ncbi_gene, dbsnp, clinvar, gnomad, kegg, reactome, chebi, chembl, pubchem, bindingdb, pharos, hpo, string, pubmed.",
         "x-streaming": false,
         "requestBody": {
           "required": true,
@@ -854,6 +854,7 @@
                       "federated",
                       "uniprot",
                       "pdb",
+                      "pdbe",
                       "alphafold",
                       "ncbi_gene",
                       "dbsnp",
@@ -863,6 +864,9 @@
                       "reactome",
                       "chebi",
                       "chembl",
+                      "pubchem",
+                      "bindingdb",
+                      "pharos",
                       "hpo",
                       "string",
                       "pubmed"
@@ -872,6 +876,16 @@
                   "query": {
                     "type": "string",
                     "description": "Accession, gene symbol, compound name, or free text."
+                  },
+                  "operation": {
+                    "type": "string",
+                    "description": "Search mode chosen from user intent: 'lookup' (by ID/name, default), 'similarity' (chembl/pubchem=chemical similarity over SMILES; pdb=sequence homologs over the whole PDB), or 'text' (keyword search).",
+                    "enum": [
+                      "lookup",
+                      "similarity",
+                      "text"
+                    ],
+                    "default": "lookup"
                   },
                   "entity_type": {
                     "type": "string",

@@ -434,8 +434,8 @@ TOOL_SCHEMAS: List[ToolSchema] = [
         description=(
             "Query a biological/chemical database by accession or name. "
             "Use database='federated' to fan out across all sources simultaneously and merge results. "
-            "Single-source options: uniprot, pdb, alphafold, ncbi_gene, dbsnp, clinvar, gnomad, "
-            "kegg, reactome, chebi, chembl, hpo, string, pubmed."
+            "Single-source options: uniprot, pdb, pdbe, alphafold, ncbi_gene, dbsnp, clinvar, gnomad, "
+            "kegg, reactome, chebi, chembl, pubchem, bindingdb, pharos, hpo, string, pubmed."
         ),
         input_schema={
             "type": "object",
@@ -445,15 +445,25 @@ TOOL_SCHEMAS: List[ToolSchema] = [
                     "description": "Database to query. Use 'federated' to query all sources in parallel.",
                     "enum": [
                         "federated",
-                        "uniprot", "pdb", "alphafold", "ncbi_gene",
+                        "uniprot", "pdb", "pdbe", "alphafold", "ncbi_gene",
                         "dbsnp", "clinvar", "gnomad",
                         "kegg", "reactome",
-                        "chebi", "chembl",
+                        "chebi", "chembl", "pubchem", "bindingdb", "pharos",
                         "hpo", "string", "pubmed",
                     ],
                     "default": "federated",
                 },
                 "query": {"type": "string", "description": "Accession, gene symbol, compound name, or free text."},
+                "operation": {
+                    "type": "string",
+                    "description": (
+                        "Search mode chosen from user intent: 'lookup' (by ID/name, default), "
+                        "'similarity' (chembl/pubchem=chemical similarity over SMILES; "
+                        "pdb=sequence homologs over the whole PDB), or 'text' (keyword search)."
+                    ),
+                    "enum": ["lookup", "similarity", "text"],
+                    "default": "lookup",
+                },
                 "entity_type": {
                     "type": "string",
                     "description": "Hint for federated routing: gene, protein, variant, compound, pathway, disease, or omit to auto-detect.",
