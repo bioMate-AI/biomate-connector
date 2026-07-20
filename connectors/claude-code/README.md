@@ -10,7 +10,7 @@
 npx @biomate/connect claude-code
 ```
 
-The installer opens your browser, runs OAuth 2.1 + PKCE against `biomate.ai`, and writes the MCP server entry into `~/.claude.json`.
+The installer opens your browser, runs OAuth 2.1 + PKCE against `biomate.ai`, and writes the MCP server entry into `~/.mcp.json`.
 
 **Restart Claude Code** to pick up the new server.
 
@@ -77,7 +77,7 @@ Claude Code gains 14 MCP tools across 3 tiers:
 
 ## Manual config (advanced)
 
-If `npx @biomate/connect` is not available, add this to `~/.claude.json`:
+If `npx @biomate/connect` is not available, add this to `~/.mcp.json`:
 
 ```json
 {
