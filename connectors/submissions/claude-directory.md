@@ -80,7 +80,7 @@ The privacy URL is referenced in the connector `README.md`, the generated
 | Requirement | Status | Notes |
 |---|---|---|
 | OAuth 2.0 / 2.1 | ✅ | PKCE authorization server in `oauth_server/` |
-| Remote HTTPS MCP endpoint (Streamable HTTP or SSE) | ⚠️ **confirm** | Directory strongly prefers a remote server. Publish the MCP endpoint (e.g. `https://app.biomate.ai/mcp`). The repo also ships a local stdio server for Desktop/Cursor/Codex. |
+| Remote HTTPS MCP endpoint (Streamable HTTP or SSE) | ✅ | **LIVE (staging):** `https://mcp.stage-public.biomate.ai/mcp` — Streamable HTTP (MCP `2025-11-25`), OAuth 2.1 + PKCE + DCR + RFC 9728/8414 discovery, valid Let's Encrypt cert. Code: `remote_mcp/`. Prod cutover to `https://app.biomate.ai/mcp` pending. The repo also ships a local stdio server for Desktop/Cursor/Codex. |
 | Per-tool `title` | ✅ | All 17 tools — `mcp/tools_manifest.py`, regenerated into `tools_manifest.json` |
 | `readOnlyHint` / `destructiveHint` annotations | ✅ | All 17 tools; `cancel_run` → destructive; read tools → readOnly. Emitted under each tool's `annotations`. |
 | Tools tested | ✅ | `tests/test_tools_manifest.py`, `tests/test_mcp_e2e.py`, `tests/test_connector_live.py` |
@@ -130,7 +130,7 @@ The privacy URL is referenced in the connector `README.md`, the generated
 - [x] **Tool annotations** — 17 tools have `title` + `readOnlyHint`/`destructiveHint` (was blocker #1)
 - [ ] **Privacy policy page LIVE** — publish `connectors/legal/privacy.md` at `biomate.ai/legal/privacy` after legal review (was blocker #2; content drafted)
 - [ ] Team/Enterprise org + Owner role confirmed
-- [ ] Remote HTTPS MCP endpoint published & reachable
+- [x] **Remote HTTPS MCP endpoint published & reachable** — LIVE at `https://mcp.stage-public.biomate.ai/mcp` (staging); prod `app.biomate.ai/mcp` cutover pending
 - [ ] Documentation URL live and public
 - [ ] Logo asset attached (≥512×512)
 - [ ] Reviewer test account + credentials prepared

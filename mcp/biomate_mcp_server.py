@@ -371,6 +371,53 @@ class BioMateClient:
         except Exception as exc:
             return {**self._classify_exc(exc), "database": database, "query": query}
 
+    def resolve_accession(self, accession: str) -> Dict[str, Any]:
+        try:
+            r = self.session.post(
+                self._url("/api/accession/resolve"),
+                json={"accession": accession},
+                timeout=20,
+            )
+            r.raise_for_status()
+            return r.json()
+        except Exception as exc:
+            return {**self._classify_exc(exc), "accession": accession}
+
+    # S3 workspace sources are browsed by prefix; public file sources by source+path.
+    _S3_SOURCES = frozenset({"biomate_workspace", "user_s3"})
+
+    def browse_data(self, source_id: str, path: Optional[str] = None) -> Dict[str, Any]:
+        try:
+            if source_id in self._S3_SOURCES:
+                r = self.session.get(
+                    self._url("/api/s3/browse"),
+                    params={"prefix": (path or "").lstrip("/")},
+                    timeout=20,
+                )
+            else:
+                params = {"source": source_id}
+                if path:
+                    params["path"] = path
+                r = self.session.get(self._url("/api/data/browse"), params=params, timeout=25)
+            r.raise_for_status()
+            return r.json()
+        except Exception as exc:
+            return {**self._classify_exc(exc), "source_id": source_id, "path": path}
+
+    def fetch_public_data(
+        self, source_id: str, remote_path: Optional[str] = None, url: Optional[str] = None
+    ) -> Dict[str, Any]:
+        try:
+            r = self.session.post(
+                self._url("/api/data/fetch"),
+                json={"source": source_id, "path": remote_path, "url": url},
+                timeout=60,
+            )
+            r.raise_for_status()
+            return r.json()
+        except Exception as exc:
+            return {**self._classify_exc(exc), "source_id": source_id}
+
     def search_literature(self, query: str, max_depth: int = 2, min_results: int = 10) -> Dict[str, Any]:
         try:
             r = self.session.post(
@@ -1351,6 +1398,19 @@ def dispatch_tool(client: BioMateClient, tool_name: str, args: Dict[str, Any]) -
             query=args["query"],
             max_depth=int(args.get("max_depth", 2)),
             min_results=int(args.get("min_results", 10)),
+        )
+
+    if tool_name == "resolve_accession":
+        return client.resolve_accession(accession=args["accession"])
+
+    if tool_name == "browse_data":
+        return client.browse_data(source_id=args["source_id"], path=args.get("path"))
+
+    if tool_name == "fetch_public_data":
+        return client.fetch_public_data(
+            source_id=args["source_id"],
+            remote_path=args.get("remote_path"),
+            url=args.get("url"),
         )
 
     if tool_name == "recall_memory":
