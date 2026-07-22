@@ -14,8 +14,8 @@
   },
   "servers": [
     {
-      "url": "https://dev-public.biomate.ai",
-      "description": "Dev"
+      "url": "https://api.biomate.ai",
+      "description": "Production"
     }
   ],
   "paths": {
@@ -1412,8 +1412,8 @@
         "type": "oauth2",
         "flows": {
           "authorizationCode": {
-            "authorizationUrl": "https://dev-public.biomate.ai/oauth/authorize",
-            "tokenUrl": "https://dev-public.biomate.ai/oauth/token",
+            "authorizationUrl": "https://biomate.ai/oauth/authorize",
+            "tokenUrl": "https://biomate.ai/oauth/token",
             "scopes": {
               "runs:read": "Read run status and outputs",
               "runs:write": "Launch and cancel runs",

@@ -1413,6 +1413,116 @@ def dispatch_instrument_tool(tool_name: str, args: Dict[str, Any]) -> Any:
     raise ValueError(f"Unknown instrument tool: {tool_name}")
 
 
+def _load_dbtl():
+    """Lazily import the DBTL engine (macrocycle designer + permeability scorer +
+    BO policy) from the sibling lab_instruments package. Kept lazy so the MCP
+    server has no hard dependency on RDKit / sklearn unless a DBTL tool is
+    actually called.
+
+    Imported package-qualified (`lab_instruments.X`) — cyclic_peptide_dbtl.py
+    uses a relative `from .dbtl_controller import …`, which only resolves when
+    the module is loaded as part of the `lab_instruments` package. So we put the
+    repo root (the parent of lab_instruments) on sys.path, not lab_instruments
+    itself."""
+    import sys
+    root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    if root not in sys.path:
+        sys.path.insert(0, root)
+    from lab_instruments.macrocycle_designer import propose  # type: ignore  # noqa: E402
+    from lab_instruments.cyclic_peptide_scorer import load_perm_scorer  # type: ignore  # noqa: E402
+    from lab_instruments.cyclic_peptide_dbtl import make_bo_policy  # type: ignore  # noqa: E402
+    from lab_instruments.dbtl_controller import Decision  # type: ignore  # noqa: E402
+    return propose, load_perm_scorer, make_bo_policy, Decision
+
+
+# Per-process scorer cache keyed by pickle path — loading the HistGBM model is
+# expensive, and score_candidates is typically called many times per session.
+_DBTL_SCORER_CACHE: Dict[str, Any] = {}
+
+
+def _get_perm_scorer(load_perm_scorer):
+    """Load (and cache) the pickled permeability scorer from BIOMATE_PERM_SCORER_PKL."""
+    pkl = os.environ.get("BIOMATE_PERM_SCORER_PKL")
+    if not pkl:
+        raise ValueError(
+            "score_candidates needs the pickled permeability model. Set the "
+            "BIOMATE_PERM_SCORER_PKL env var to a local path to "
+            "cycpep_perm_histgbm[_3d].pkl — sync it from "
+            "s3://knowledge-datasets-1759951976/cyclic_peptide/scorer/."
+        )
+    if not os.path.exists(pkl):
+        raise ValueError(
+            f"BIOMATE_PERM_SCORER_PKL points to a missing file: {pkl!r}. Sync the "
+            "model from s3://knowledge-datasets-1759951976/cyclic_peptide/scorer/."
+        )
+    if pkl not in _DBTL_SCORER_CACHE:
+        _DBTL_SCORER_CACHE[pkl] = load_perm_scorer(pkl)
+    return _DBTL_SCORER_CACHE[pkl]
+
+
+def dispatch_dbtl_tool(tool_name: str, args: Dict[str, Any]) -> Any:
+    """Local-only dispatch for the DBTL (Design→Test→Learn) cyclic-peptide tools.
+
+    Pure in-process computations over lab_instruments/: the designer needs RDKit,
+    the scorer additionally needs the pickled model on the local machine
+    (BIOMATE_PERM_SCORER_PKL). None proxy to the cloud backend.
+    """
+    propose, load_perm_scorer, make_bo_policy, Decision = _load_dbtl()
+
+    if tool_name == "design_candidates":
+        # macrocycle_designer.propose reads exactly these keys off params, so we
+        # pass args straight through (n, length, max_nmethyl, alphabet, seed).
+        length = args.get("length")
+        if isinstance(length, list):
+            args = {**args, "length": tuple(length)}  # propose uses randint(*length)
+        candidates = propose(args)
+        return {"candidates": candidates, "count": len(candidates)}
+
+    if tool_name == "score_candidates":
+        candidates = args.get("candidates") or []
+        scorer = _get_perm_scorer(load_perm_scorer)
+        scored = []
+        for c in candidates:
+            v = float(scorer(c))
+            scored.append({**c, "predicted_logPapp": v})
+        scored.sort(key=lambda c: c["predicted_logPapp"], reverse=True)
+        return {
+            "scored": scored,
+            "model": "permeability_logpapp_histgbm",
+            "ranked_desc": True,
+        }
+
+    if tool_name == "propose_next_round":
+        results = args.get("results") or []
+        objective = args.get("objective", "hit_fraction")
+        target = float(args.get("target", 0.3))
+        max_no_improve = int(args.get("max_no_improve", 2))
+        params = args.get("params") or {}
+        vals = [float(r["measured_metric"]) for r in results if "measured_metric" in r]
+        # Aggregate the batch into the single scalar `metric` the BO policy expects.
+        # For hit_fraction: fraction of measurements that meet/exceed the target
+        # (matches make_assay_analyze's hit-fraction semantics). For permeability /
+        # affinity objectives the metric is the batch mean of the measured value.
+        if not vals:
+            metric = None
+        elif objective == "hit_fraction":
+            metric = sum(1 for v in vals if v >= target) / len(vals)
+        else:
+            metric = sum(vals) / len(vals)
+        policy = make_bo_policy(target=target, max_no_improve=max_no_improve)
+        # History is empty for a one-shot call, so PIVOT (which needs `max_no_improve`
+        # flat rounds of history) cannot fire here — that requires run_dbtl_loop.
+        decision, next_params, note = policy(metric, params, [])
+        return {
+            "decision": decision.value,
+            "rationale": note,
+            "next_params": next_params,
+            "metric": metric,
+        }
+
+    raise ValueError(f"Unknown DBTL tool: {tool_name}")
+
+
 def dispatch_tool(client: BioMateClient, tool_name: str, args: Dict[str, Any]) -> Any:
     """Execute a non-streaming tool call. Returns JSON-serializable result.
 
@@ -1425,6 +1535,11 @@ def dispatch_tool(client: BioMateClient, tool_name: str, args: Dict[str, Any]) -
     # lab's private LAN.
     if tool_name in ("list_instruments", "get_instrument_status", "run_instrument_protocol"):
         return dispatch_instrument_tool(tool_name, args)
+
+    # Local-only DBTL tools also dispatch inside this process — pure in-silico
+    # design/score/decide over lab_instruments/ (no cloud round-trip).
+    if tool_name in ("design_candidates", "score_candidates", "propose_next_round"):
+        return dispatch_dbtl_tool(tool_name, args)
 
     if tool_name == "search_workflow":
         return client.search_workflow(query=args["query"], limit=int(args.get("limit", 5)))

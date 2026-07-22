@@ -784,6 +784,177 @@ TOOL_SCHEMAS: List[ToolSchema] = [
         open_world_hint=True,
         local_only=True,
     ),
+    # ── DBTL — closed-loop cyclic-peptide design (Design → Test → Learn) ────────
+    # These wrap the in-silico DBTL engine in lab_instruments/ (macrocycle
+    # designer + permeability scorer + BO acquisition policy). They are pure
+    # local computations dispatched inside this process (see dispatch_dbtl_tool
+    # in biomate_mcp_server.py). Like the instrument tools they are `local_only`:
+    # the scorer needs the pickled model synced to the scientist's machine
+    # (BIOMATE_PERM_SCORER_PKL) and RDKit in the local runtime, so they are never
+    # advertised on ChatGPT / Open Claw / Skill / lite surfaces.
+    ToolSchema(
+        name="design_candidates",
+        tier="instrument",
+        description=(
+            "Design (in-silico) — generate a library of candidate cyclic "
+            "(macrocyclic) peptides for a design goal. Enumerates head-to-tail "
+            "cyclic peptides over an amino-acid alphabet with controllable "
+            "N-methylation, returning each candidate's sequence, residues, "
+            "N-methylation count/positions, and a ready-to-use cyclic SMILES. "
+            "This is the Design step of the DBTL loop — feed its output straight "
+            "into score_candidates to prioritize what to synthesize. Runs locally; "
+            "requires RDKit in the connector runtime."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "n": {
+                    "type": "integer",
+                    "default": 200,
+                    "minimum": 1,
+                    "maximum": 5000,
+                    "description": "How many candidates to generate.",
+                },
+                "length": {
+                    "description": "Residues per macrocycle: a fixed int, or a [min,max] range to sample.",
+                    "default": [6, 8],
+                    "oneOf": [
+                        {"type": "integer", "minimum": 4, "maximum": 15},
+                        {
+                            "type": "array",
+                            "items": {"type": "integer", "minimum": 4, "maximum": 15},
+                            "minItems": 2,
+                            "maxItems": 2,
+                        },
+                    ],
+                },
+                "max_nmethyl": {
+                    "type": "integer",
+                    "default": 2,
+                    "minimum": 0,
+                    "description": "Cap on N-methylations per peptide (N-Me is expensive to synthesize).",
+                },
+                "alphabet": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Residue names to sample (e.g. ['Ala','Leu','Phe']). Omit for the lipophilic-leaning default alphabet.",
+                },
+                "seed": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "RNG seed — vary between rounds to draw a fresh batch.",
+                },
+            },
+        },
+        backend_path="local:dbtl/design_candidates",
+        backend_method="POST",
+        title="Design Cyclic-Peptide Candidates",
+        read_only_hint=True,
+        destructive_hint=False,
+        idempotent_hint=True,
+        open_world_hint=False,
+        local_only=True,
+    ),
+    ToolSchema(
+        name="score_candidates",
+        tier="instrument",
+        description=(
+            "Test (in-silico property prediction) — predict membrane permeability "
+            "(log Papp) for candidate cyclic peptides using the production HistGBM "
+            "scorer over RDKit descriptors (the model that won the scaffold-split "
+            "head-to-heads). Accepts the output of design_candidates (or raw SMILES) "
+            "and returns candidates ranked by predicted permeability, descending, so "
+            "the host can prioritize what to synthesize. Runs locally; requires "
+            "RDKit and the pickled model at BIOMATE_PERM_SCORER_PKL (sync from "
+            "s3://knowledge-datasets-1759951976/cyclic_peptide/scorer/)."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "candidates": {
+                    "type": "array",
+                    "description": "Candidates to score (each needs `smiles`).",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "smiles": {"type": "string", "description": "Candidate SMILES (structure)."},
+                            "seq": {"type": "string", "description": "Optional sequence identifier, echoed back."},
+                        },
+                        "required": ["smiles"],
+                    },
+                },
+            },
+            "required": ["candidates"],
+        },
+        backend_path="local:dbtl/score_candidates",
+        backend_method="POST",
+        title="Score Cyclic-Peptide Permeability",
+        read_only_hint=True,
+        destructive_hint=False,
+        idempotent_hint=True,
+        open_world_hint=False,
+        local_only=True,
+    ),
+    ToolSchema(
+        name="propose_next_round",
+        tier="instrument",
+        description=(
+            "Learn + Decide — given measured assay results from the last "
+            "synthesized batch, decide whether to PROCEED (target met), REFINE "
+            "(adjust design params and keep going), or PIVOT (flat rounds → change "
+            "strategy), and return the next design parameters to synthesize. This is "
+            "the Learn step that closes the DBTL loop between wet-lab results and the "
+            "next design round. One-shot: it decides from the aggregate metric of the "
+            "batch you pass; multi-round PIVOT detection (needs iteration history) "
+            "requires the orchestrated run_dbtl_loop tool. Runs locally, no compute job."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "results": {
+                    "type": "array",
+                    "description": "Prior batch: each candidate and its measured value.",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "candidate": {"type": "object", "description": "The candidate that was measured."},
+                            "measured_metric": {"type": "number", "description": "Its measured value (e.g. logPapp, KD, or hit indicator)."},
+                        },
+                        "required": ["candidate", "measured_metric"],
+                    },
+                },
+                "objective": {
+                    "type": "string",
+                    "enum": ["permeability", "affinity", "hit_fraction"],
+                    "default": "hit_fraction",
+                    "description": "How to aggregate results into the decision metric.",
+                },
+                "target": {
+                    "type": "number",
+                    "default": 0.3,
+                    "description": "Target metric (e.g. hit-fraction 0.3, or a logPapp cutoff).",
+                },
+                "max_no_improve": {
+                    "type": "integer",
+                    "default": 2,
+                    "description": "Flat rounds before PIVOT (only fires with iteration history — see run_dbtl_loop).",
+                },
+                "params": {
+                    "type": "object",
+                    "description": "Current design params to advance (round, perm_threshold, explore, …). Optional.",
+                },
+            },
+            "required": ["results"],
+        },
+        backend_path="local:dbtl/propose_next_round",
+        backend_method="POST",
+        title="Propose Next DBTL Round",
+        read_only_hint=True,
+        destructive_hint=False,
+        idempotent_hint=True,
+        open_world_hint=False,
+        local_only=True,
+    ),
 ]
 
 
