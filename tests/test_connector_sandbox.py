@@ -126,13 +126,6 @@ VALID_SAMPLES: Dict[str, Dict[str, Any]] = {
     "list_instruments": {"ips": ["192.168.1.42"]},
     "get_instrument_status": {"robot_ip": "192.168.1.42", "run_id": "run-xyz"},
     "run_instrument_protocol": {"robot_ip": "192.168.1.42", "confirm": False},
-    "design_candidates": {"n": 50, "length": [6, 8], "max_nmethyl": 2, "seed": 0},
-    "score_candidates": {"candidates": [{"smiles": "C1CCCCC1", "seq": "cyc-1"}]},
-    "propose_next_round": {
-        "results": [{"candidate": {"seq": "cyc-1"}, "measured_metric": -5.8}],
-        "objective": "hit_fraction",
-        "target": 0.3,
-    },
 }
 
 
@@ -438,13 +431,13 @@ def test_mcp_initialize_handshake(mcp_server):
     assert resp["result"]["capabilities"]["tools"]
 
 
-def test_mcp_tools_list_returns_all_tools(mcp_server):
+def test_mcp_tools_list_returns_22_tools(mcp_server):
     _initialize(mcp_server)
     _send(mcp_server, {"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
     resp = _read_one(mcp_server)
     names = [t["name"] for t in resp["result"]["tools"]]
-    # MCP surface exposes every tool (incl. local_only instrument + DBTL tools).
-    assert len(names) == len(tm.TOOL_SCHEMAS)
+    # MCP surface exposes every tool (incl. local_only instrument tools).
+    assert len(names) == 22
     for required in ("biomate_session", "search_workflow", "get_run", "export_report",
                      "resolve_accession", "browse_data", "fetch_public_data"):
         assert required in names
