@@ -462,6 +462,30 @@ class BioMateClient:
         except Exception as exc:
             return self._classify_exc(exc)
 
+    def get_quota(self) -> Dict[str, Any]:
+        """Plan limits + current usage % for the authenticated user."""
+        try:
+            r = self.session.get(self._url("/api/billing/quota"), timeout=15)
+            r.raise_for_status()
+            return r.json()
+        except Exception as exc:
+            return self._classify_exc(exc)
+
+    def get_usage(self, period: str = "month") -> Dict[str, Any]:
+        """Usage/cost breakdown. period: 'month' (current-cycle breakdown),
+        'history' (past months), or 'cohort' (relative cost position)."""
+        path = {
+            "month": "/api/billing/usage",
+            "history": "/api/billing/usage/history",
+            "cohort": "/api/billing/usage/cohort",
+        }.get(period, "/api/billing/usage")
+        try:
+            r = self.session.get(self._url(path), timeout=15)
+            r.raise_for_status()
+            return r.json()
+        except Exception as exc:
+            return self._classify_exc(exc)
+
     def analyze_results(self, run_id: str, question: str) -> Dict[str, Any]:
         try:
             r = self.session.post(
@@ -1453,6 +1477,12 @@ def dispatch_tool(client: BioMateClient, tool_name: str, args: Dict[str, Any]) -
             limit=int(args.get("limit", 10)),
             status=args.get("status", "all"),
         )
+
+    if tool_name == "get_quota":
+        return client.get_quota()
+
+    if tool_name == "get_usage":
+        return client.get_usage(args.get("period", "month"))
 
     if tool_name == "preview_file":
         return client.preview_file(

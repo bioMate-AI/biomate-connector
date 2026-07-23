@@ -334,6 +334,39 @@ TOOL_SCHEMAS: List[ToolSchema] = [
         title="List Runs",
         read_only_hint=True,
     ),
+    ToolSchema(
+        name="get_quota",
+        tier="workflow",
+        description="Return the user's plan limits and current usage percentage (credits/compute consumed this cycle).",
+        input_schema={"type": "object", "properties": {}},
+        backend_path="/api/billing/quota",
+        backend_method="GET",
+        title="Get Plan Quota",
+        read_only_hint=True,
+    ),
+    ToolSchema(
+        name="get_usage",
+        tier="workflow",
+        description=(
+            "Return the user's current-month usage/cost breakdown by category — LLM tokens, "
+            "vCPU-hours, GPU-hours, storage. period=history returns past months; "
+            "period=cohort returns relative cost position."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "period": {
+                    "type": "string",
+                    "enum": ["month", "history", "cohort"],
+                    "default": "month",
+                },
+            },
+        },
+        backend_path="/api/billing/usage",
+        backend_method="GET",
+        title="Get Usage Breakdown",
+        read_only_hint=True,
+    ),
 
     # ── Tier 3: outputs, analysis, reporting ──────────────────────────────────
     ToolSchema(

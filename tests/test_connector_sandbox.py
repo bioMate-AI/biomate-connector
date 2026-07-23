@@ -111,6 +111,8 @@ VALID_SAMPLES: Dict[str, Dict[str, Any]] = {
     "get_run": {"run_id": "run-xyz", "include_findings": True},
     "cancel_run": {"run_id": "run-xyz"},
     "list_runs": {"limit": 5, "status": "running"},
+    "get_quota": {},
+    "get_usage": {"period": "month"},
     "preview_file": {"s3_key": "s3://bucket/output.csv", "max_rows": 50},
     "export_report": {"run_id": "run-xyz", "format": "pdf", "sections": ["methods", "qc"]},
     "analyze_results": {"run_id": "run-xyz", "question": "any hERG hits?"},
@@ -431,13 +433,13 @@ def test_mcp_initialize_handshake(mcp_server):
     assert resp["result"]["capabilities"]["tools"]
 
 
-def test_mcp_tools_list_returns_22_tools(mcp_server):
+def test_mcp_tools_list_returns_24_tools(mcp_server):
     _initialize(mcp_server)
     _send(mcp_server, {"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
     resp = _read_one(mcp_server)
     names = [t["name"] for t in resp["result"]["tools"]]
     # MCP surface exposes every tool (incl. local_only instrument tools).
-    assert len(names) == 22
+    assert len(names) == 24
     for required in ("biomate_session", "search_workflow", "get_run", "export_report",
                      "resolve_accession", "browse_data", "fetch_public_data"):
         assert required in names

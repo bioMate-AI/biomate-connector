@@ -259,6 +259,48 @@
       }
     },
     {
+      "name": "get_quota",
+      "title": "Get Plan Quota",
+      "description": "Return the user's plan limits and current usage percentage (credits/compute consumed this cycle).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "annotations": {
+        "title": "Get Plan Quota",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "get_usage",
+      "title": "Get Usage Breakdown",
+      "description": "Return the user's current-month usage/cost breakdown by category \u2014 LLM tokens, vCPU-hours, GPU-hours, storage. period=history returns past months; period=cohort returns relative cost position.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "period": {
+            "type": "string",
+            "enum": [
+              "month",
+              "history",
+              "cohort"
+            ],
+            "default": "month"
+          }
+        }
+      },
+      "annotations": {
+        "title": "Get Usage Breakdown",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      }
+    },
+    {
       "name": "preview_file",
       "title": "Preview Output File",
       "description": "Render a server-side preview of an output file (FASTA, VCF, CSV/TSV, image, PDF). Returns markdown + optional thumbnail PNG. Use this to show the user what an output looks like without downloading multi-GB files. For input QC of files the user is about to upload, prefer biomate_session (it runs a real QC workflow).",
@@ -983,6 +1025,32 @@
       }
     },
     {
+      "name": "get_quota",
+      "description": "Return the user's plan limits and current usage percentage (credits/compute consumed this cycle).",
+      "input_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "get_usage",
+      "description": "Return the user's current-month usage/cost breakdown by category \u2014 LLM tokens, vCPU-hours, GPU-hours, storage. period=history returns past months; period=cohort returns relative cost position.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "period": {
+            "type": "string",
+            "enum": [
+              "month",
+              "history",
+              "cohort"
+            ],
+            "default": "month"
+          }
+        }
+      }
+    },
+    {
       "name": "preview_file",
       "description": "Render a server-side preview of an output file (FASTA, VCF, CSV/TSV, image, PDF). Returns markdown + optional thumbnail PNG. Use this to show the user what an output looks like without downloading multi-GB files. For input QC of files the user is about to upload, prefer biomate_session (it runs a real QC workflow).",
       "input_schema": {
@@ -1510,6 +1578,38 @@
             "experiment_id": {
               "type": "string",
               "description": "Optional experiment filter."
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "get_quota",
+        "description": "Return the user's plan limits and current usage percentage (credits/compute consumed this cycle).",
+        "parameters": {
+          "type": "object",
+          "properties": {}
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "get_usage",
+        "description": "Return the user's current-month usage/cost breakdown by category \u2014 LLM tokens, vCPU-hours, GPU-hours, storage. period=history returns past months; period=cohort returns relative cost position.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "period": {
+              "type": "string",
+              "enum": [
+                "month",
+                "history",
+                "cohort"
+              ],
+              "default": "month"
             }
           }
         }
@@ -2245,6 +2345,18 @@
       "name": "list_runs",
       "method": "GET",
       "path": "/api/workflows/runs",
+      "streaming": false
+    },
+    {
+      "name": "get_quota",
+      "method": "GET",
+      "path": "/api/billing/quota",
+      "streaming": false
+    },
+    {
+      "name": "get_usage",
+      "method": "GET",
+      "path": "/api/billing/usage",
       "streaming": false
     },
     {

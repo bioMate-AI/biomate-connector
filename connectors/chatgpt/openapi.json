@@ -554,6 +554,120 @@
         ]
       }
     },
+    "/tools/get_quota": {
+      "post": {
+        "operationId": "get_quota",
+        "summary": "Return the user's plan limits and current usage percentage (credits/compute consumed this cycle).",
+        "description": "Return the user's plan limits and current usage percentage (credits/compute consumed this cycle).",
+        "x-streaming": false,
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {}
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tool result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 reauthorize via /oauth/authorize"
+          },
+          "402": {
+            "description": "Quota or billing gate triggered \u2014 see billing.biomate.ai"
+          },
+          "429": {
+            "description": "Rate limited \u2014 retry after the Retry-After header"
+          },
+          "500": {
+            "description": "Internal error"
+          }
+        },
+        "security": [
+          {
+            "BiomateOAuth": [
+              "runs:read",
+              "runs:write",
+              "workflows:search"
+            ]
+          }
+        ]
+      }
+    },
+    "/tools/get_usage": {
+      "post": {
+        "operationId": "get_usage",
+        "summary": "Return the user's current-month usage/cost breakdown by category \u2014 LLM tokens, vCPU-hours, GPU-hours, storage.",
+        "description": "Return the user's current-month usage/cost breakdown by category \u2014 LLM tokens, vCPU-hours, GPU-hours, storage. period=history returns past months; period=cohort returns relative cost position.",
+        "x-streaming": false,
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "period": {
+                    "type": "string",
+                    "enum": [
+                      "month",
+                      "history",
+                      "cohort"
+                    ],
+                    "default": "month"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tool result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 reauthorize via /oauth/authorize"
+          },
+          "402": {
+            "description": "Quota or billing gate triggered \u2014 see billing.biomate.ai"
+          },
+          "429": {
+            "description": "Rate limited \u2014 retry after the Retry-After header"
+          },
+          "500": {
+            "description": "Internal error"
+          }
+        },
+        "security": [
+          {
+            "BiomateOAuth": [
+              "runs:read",
+              "runs:write",
+              "workflows:search"
+            ]
+          }
+        ]
+      }
+    },
     "/tools/preview_file": {
       "post": {
         "operationId": "preview_file",
