@@ -1,0 +1,58 @@
+# remote_mcp — BioMate Streamable-HTTP MCP transport, as a SUPERVISED container.
+#
+# Why this exists: the frontend proxies /mcp -> the remote_mcp uvicorn service,
+# but that service was never deployed or supervised on dev — it isn't in
+# sync_to_dev.sh, isn't a systemd unit, and can't run inside the Node-only
+# frontend container that the proxy's 127.0.0.1:8848 pointed at. So /mcp kept
+# 502-ing ("down again"). This image runs it as its own container with
+# --restart=always on the shared Docker network, reachable by DNS name.
+# See docs/20260723_CONNECTOR_CONTRACT_TEST_AND_STABILITY.md (biomate repo).
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Runtime deps. mcp>=1.9 is REQUIRED: remote_mcp uses StreamableHTTPSessionManager
+# and TransportSecuritySettings, which only exist in the modern SDK (<1.8 lacks
+# them). Cap <2 to avoid a hypothetical major-version API break.
+RUN pip install --no-cache-dir \
+      "uvicorn>=0.24" \
+      "starlette>=0.36" \
+      "mcp>=1.9,<2" \
+      "httpx>=0.25" \
+      "requests>=2.30" \
+      "cryptography>=41" \
+      "PyJWT>=2.8" \
+      "anyio>=4.0"
+
+# The bootstrap module rewrites sys.path at import time so the local `mcp/`
+# package (tools_manifest + stdio server, reused by the HTTP layer) does not
+# shadow the pip `mcp` SDK. That requires the full repo layout with /app as the
+# repo root (WORKDIR), so COPY exactly the packages remote_mcp imports.
+COPY remote_mcp/ ./remote_mcp/
+COPY mcp/ ./mcp/
+COPY oauth_server/ ./oauth_server/
+COPY biomate_connector/ ./biomate_connector/
+
+# Build-time guard: fail the BUILD (not a runtime crash-loop) if the mcp SDK is
+# too old / the wrong version, or the mcp-shadow bootstrap can't resolve both the
+# local mcp/ modules AND the pip SDK. This is the test we can't run without a
+# local docker daemon — so we bake it into the image build.
+RUN python -c "import remote_mcp.bootstrap; \
+import mcp.server.streamable_http_manager as _s; \
+import mcp.server.transport_security as _t; \
+import tools_manifest, biomate_mcp_server; \
+print('remote_mcp import guard OK — mcp SDK has StreamableHTTP + TransportSecurity')"
+
+# 0.0.0.0 so other containers on the Docker network can reach it. The default
+# 127.0.0.1 (container loopback) is precisely why a naive start was unreachable.
+ENV BIOMATE_MCP_HOST=0.0.0.0 \
+    BIOMATE_MCP_PORT=8848 \
+    PYTHONUNBUFFERED=1
+
+EXPOSE 8848
+
+# Liveness = uvicorn has bound the port. Cheap, dependency-free, no auth needed.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD python -c "import socket,sys; socket.create_connection(('127.0.0.1',8848),timeout=4).close()" || exit 1
+
+CMD ["python", "-m", "remote_mcp.run"]
