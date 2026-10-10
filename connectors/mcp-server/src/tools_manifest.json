@@ -32,10 +32,6 @@
             "type": "integer",
             "description": "Max results (default 5, max 20).",
             "default": 5
-          },
-          "domain": {
-            "type": "string",
-            "description": "Optional domain filter: transcriptomics, genomics, proteomics, drug_discovery, cryo_em, etc."
           }
         },
         "required": [
@@ -82,7 +78,7 @@
     },
     {
       "name": "get_run",
-      "description": "Return everything about a run in one call: status (pending|running|completed|failed), per-phase and per-step progress with timestamps, output files with download URLs, structured findings, QC gate results, and any auto-loop remediations applied. Replaces get_run_status + get_run_results + step-level findings polling.",
+      "description": "Read the current run status, identifiers, output files and optional prepared findings. Poll again while the run or findings are still being prepared.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -119,7 +115,7 @@
     },
     {
       "name": "list_runs",
-      "description": "List the user's recent runs with status and timestamps. Filter by status or experiment.",
+      "description": "List recent runs for the signed-in user, optionally filtering status and limiting the number returned.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -138,10 +134,6 @@
               "pending"
             ],
             "default": "all"
-          },
-          "experiment_id": {
-            "type": "string",
-            "description": "Optional experiment filter."
           }
         }
       }
@@ -175,11 +167,6 @@
           "run_id": {
             "type": "string",
             "description": "Optional run_id for context-aware parsing."
-          },
-          "max_rows": {
-            "type": "integer",
-            "description": "For tabular files (default 100).",
-            "default": 100
           }
         },
         "required": [
@@ -414,16 +401,6 @@
             "type": "string",
             "description": "What to recall \u2014 usually the user's goal."
           },
-          "scope": {
-            "type": "string",
-            "enum": [
-              "runs",
-              "findings",
-              "procedures",
-              "all"
-            ],
-            "default": "all"
-          },
           "limit": {
             "type": "integer",
             "default": 5
@@ -443,10 +420,6 @@
           "filename": {
             "type": "string",
             "description": "Original filename (sets content-type and extension)."
-          },
-          "size_bytes": {
-            "type": "integer",
-            "description": "File size for quota check."
           },
           "content_type": {
             "type": "string",
