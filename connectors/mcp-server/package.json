@@ -1,0 +1,48 @@
+{
+  "name": "@biomate/mcp-server",
+  "version": "0.1.1",
+  "description": "BioMate MCP server \u2014 exposes 19 scientific workflow tools (RNA-seq, ADMET, WGS, CryoEM, proteomics, drug discovery) to any MCP-compatible AI host via stdio.",
+  "type": "module",
+  "bin": {
+    "biomate-mcp-server": "./dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc && cp src/tools_manifest.json dist/tools_manifest.json",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "biomate",
+    "mcp",
+    "bioinformatics",
+    "claude",
+    "cursor",
+    "rna-seq",
+    "genomics",
+    "drug-discovery"
+  ],
+  "author": "BioMate AI <support@biomate.ai>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bioMate-AI/biomate-connector.git",
+    "directory": "connectors/mcp-server"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.4.0"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}

@@ -131,6 +131,7 @@ async def _lifespan(app: Starlette):
         yield
 
 
+from .tool_bridge import oauth_tool
 from .oauth_app import authorize, register, token  # noqa: E402
 
 _starlette_app = Starlette(
@@ -158,6 +159,7 @@ _starlette_app = Starlette(
         Route("/oauth/register", register, methods=["POST"]),
         Route("/oauth/authorize", authorize, methods=["GET", "POST"]),
         Route("/oauth/token", token, methods=["POST"]),
+        Route("/oauth/tools/{name}", oauth_tool, methods=["POST"]),
     ],
 )
 

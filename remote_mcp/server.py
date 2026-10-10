@@ -39,6 +39,7 @@ _TOOL_SCOPES: dict[str, str] = {
     "search_workflow": "workflows:search",
     "get_workflow_spec": "workflows:search",
     "get_run": "runs:read",
+    "watch_run": "runs:read",
     "list_runs": "runs:read",
     "run_workflow": "runs:write",
     "cancel_run": "runs:write",
@@ -95,10 +96,10 @@ _client_cache: dict[str, "stdio.BioMateClient"] = {}
 def _client_for_call() -> "stdio.BioMateClient":
     ident = current_identity()
     if ident is None:
-        return _client
+        raise ValueError("Authentication required")
     api_key = resolve_api_key(ident.user_id)
     if not api_key:
-        return _client
+        raise ValueError("Reconnect BioMate: personal credentials unavailable")
     client = _client_cache.get(api_key)
     if client is None:
         client = stdio.BioMateClient(stdio.BIOMATE_API_URL, api_key)

@@ -39,9 +39,8 @@ def resolve_api_key(user_id: str) -> str:
 
     Returns the per-user ``bm_live_`` key minted + stored at authorize time
     (BioMate's middleware resolves it to the owning user, so calls run as that
-    user). Falls back to the shared ``BIOMATE_API_KEY`` only if no per-user key
-    is stored (e.g. a token issued before minting was wired).
+    user). Missing per-user credentials fail closed; shared credentials are never used.
     """
     from .credentials import get_api_key
 
-    return get_api_key(user_id) or os.environ.get("BIOMATE_API_KEY", "")
+    return get_api_key(user_id) or ""

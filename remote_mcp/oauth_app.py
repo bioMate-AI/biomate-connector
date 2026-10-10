@@ -233,35 +233,30 @@ async def _biomate_login(email: str, password: str) -> dict:
 
 
 async def _ensure_user_api_key(user_id: str, session_token: str | None) -> None:
-    """Mint + store a per-user bm_live_ API key so tool calls run as this user.
-
-    Idempotent-ish: reuses an already-stored key. Best-effort — a failure here
-    leaves the shared-key fallback in place rather than blocking authorization.
-    """
-    import logging
-
+    """Provision the caller's credential; never authorize a shared-account fallback."""
     import httpx
-
-    from .credentials import has_api_key, put_api_key
+    from .credentials import get_api_key, put_api_key
     from oauth_server.oauth.tokens import now
-
-    log = logging.getLogger("biomate.remote_mcp.oauth")
-    if not session_token or has_api_key(user_id):
-        return
-    try:
+    existing = get_api_key(user_id)
+    if existing:
         async with httpx.AsyncClient(timeout=15) as http:
-            r = await http.post(
-                f"{_login_url()}/api/user/api-keys",
-                headers={"Authorization": f"Bearer {session_token}"},
-                json={"name": "Claude MCP connector"},
-            )
-        key = r.json().get("key") if r.status_code == 200 else None
-        if key:
-            put_api_key(user_id, key, now())
-        else:
-            log.warning("api-key mint returned no key (status=%s) — using shared key fallback", r.status_code)
-    except Exception as exc:  # noqa: BLE001
-        log.warning("api-key mint failed (%s) — using shared key fallback", exc.__class__.__name__)
+            probe = await http.get(f"{_login_url()}/api/auth/me", headers={"Authorization": f"Bearer {existing}"})
+        if probe.is_success and str((probe.json().get("user") or {}).get("id")) == user_id:
+            return
+        if not probe.is_success and probe.status_code not in (401, 403):
+            raise ValueError("Could not verify existing connector credentials")
+    if not session_token:
+        raise ValueError("Missing authenticated BioMate session")
+    async with httpx.AsyncClient(timeout=15) as http:
+        response = await http.post(
+            f"{_login_url()}/api/user/api-keys",
+            headers={"Authorization": f"Bearer {session_token}"},
+            json={"name": "BioMate OAuth connector"},
+        )
+    key = response.json().get("key") if response.is_success else None
+    if not isinstance(key, str) or not key.startswith("bm_live_"):
+        raise ValueError("Could not provision personal connector credentials")
+    put_api_key(user_id, key, now())
 
 
 async def authorize(request: Request) -> Response:
@@ -300,8 +295,11 @@ async def authorize(request: Request) -> Response:
     login = await _biomate_login(str(form.get("email", "")), str(form.get("password", "")))
     if not login["ok"]:
         return _consent_page(req, outcome.client_name, outcome.requested_scopes, error=login["error"])
-    # Mint + store a per-user API key so tool calls run as this user (best-effort).
-    await _ensure_user_api_key(login["user_id"], login.get("token"))
+    # Mint + store a per-user API key so tool calls run as this user (required).
+    try:
+        await _ensure_user_api_key(login["user_id"], login.get("token"))
+    except Exception:
+        return _consent_page(req, outcome.client_name, outcome.requested_scopes, error="Could not connect your account. Please retry.")
     return _issue_code(req, login["user_id"], outcome.requested_scopes)
 
 
