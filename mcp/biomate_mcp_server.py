@@ -281,6 +281,19 @@ class BioMateClient:
         except Exception as exc:
             return {**self._classify_exc(exc), "results": []}
 
+    def identify_targets(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        try:
+            payload = {k: v for k, v in (args or {}).items() if v is not None}
+            r = self.session.post(
+                self._url("/api/target-id/identify"),
+                json=payload,
+                timeout=SEARCH_TIMEOUT,
+            )
+            r.raise_for_status()
+            return r.json()
+        except Exception as exc:
+            return {**self._classify_exc(exc), "targets": []}
+
     def run_workflow(self, workflow_id: str, params: dict, session_message: Optional[str] = None) -> Dict[str, Any]:
         # The backend's /api/workflows/execute expects a full `workflowDefinition`
         # object (NOT a bare {workflow_id, params}); for Nextflow workflows the
@@ -1452,6 +1465,9 @@ def dispatch_tool(client: BioMateClient, tool_name: str, args: Dict[str, Any]) -
 
     if tool_name == "search_workflow":
         return client.search_workflow(query=args["query"], limit=int(args.get("limit", 5)))
+
+    if tool_name == "identify_targets":
+        return client.identify_targets(args)
 
     if tool_name == "get_workflow_spec":
         return client.get_workflow_spec(workflow_id=args["workflow_id"])

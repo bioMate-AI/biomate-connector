@@ -196,6 +196,33 @@ TOOL_SCHEMAS: List[ToolSchema] = [
         open_world_hint=True,
     ),
     ToolSchema(
+        name="identify_targets",
+        tier="workflow",
+        description=(
+            "Identify and rank candidate drug targets for a disease/indication by fusing multiple "
+            "evidence channels (OpenTargets genetics, cached evidence tables, optional LLM reasoning) "
+            "through a null-calibrated evidence gate. Returns targets ranked with confidence tiers "
+            "(corroborated = AND-corroborated across >=2 channels; nominated = >=1) and per-channel "
+            "provenance. Provide disease_id (an EFO/MONDO id, e.g. MONDO_0005105 = melanoma) to enable "
+            "the genetics channel."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Indication / what targets to find."},
+                "disease_id": {"type": "string", "description": "EFO or MONDO id for the OpenTargets genetics channel (e.g. MONDO_0005105)."},
+                "candidate_targets": {"type": "array", "items": {"type": "string"}, "description": "Optional gene symbols to score/seed."},
+                "use_llm": {"type": "boolean", "description": "Add an LLM-reasoned evidence channel (default false).", "default": False},
+                "top_k": {"type": "integer", "description": "Max targets to return (default 25).", "default": 25},
+            },
+            "required": ["query"],
+        },
+        backend_path="/api/target-id/identify",
+        title="Identify Drug Targets",
+        read_only_hint=True,
+        open_world_hint=True,
+    ),
+    ToolSchema(
         name="get_workflow_spec",
         tier="workflow",
         description=(
