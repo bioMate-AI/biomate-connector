@@ -80,7 +80,9 @@ def test_openapi_operation_ids_unique():
     spec = tm.to_openapi()
     op_ids = [p["post"]["operationId"] for p in spec["paths"].values()]
     assert len(op_ids) == len(set(op_ids))
-    assert set(op_ids) == {t.name for t in tm.TOOL_SCHEMAS}
+    # The cloud OpenAPI surface excludes local_only tools (instrument + DBTL) —
+    # the cloud cannot reach lab hardware or the locally-synced scorer model.
+    assert set(op_ids) == {t.name for t in tm.TOOL_SCHEMAS if not t.local_only}
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -109,6 +111,8 @@ VALID_SAMPLES: Dict[str, Dict[str, Any]] = {
     "get_run": {"run_id": "run-xyz", "include_findings": True},
     "cancel_run": {"run_id": "run-xyz"},
     "list_runs": {"limit": 5, "status": "running"},
+    "get_quota": {},
+    "get_usage": {"period": "month"},
     "preview_file": {"s3_key": "s3://bucket/output.csv", "max_rows": 50},
     "export_report": {"run_id": "run-xyz", "format": "pdf", "sections": ["methods", "qc"]},
     "analyze_results": {"run_id": "run-xyz", "question": "any hERG hits?"},
@@ -119,6 +123,11 @@ VALID_SAMPLES: Dict[str, Dict[str, Any]] = {
     "fetch_public_data": {"source_id": "ebi_ftp", "remote_path": "/pub/databases/uniprot/current_release/knowledgebase/complete/uniprot_sprot.fasta.gz"},
     "recall_memory": {"query": "previous hERG screens", "scope": "runs", "limit": 3},
     "upload_file": {"filename": "compounds.csv", "size_bytes": 1234, "content_type": "text/csv"},
+    "watch_run": {"run_id": "run-xyz"},
+    "search_literature": {"query": "cyclic peptide oral permeability"},
+    "list_instruments": {"ips": ["192.168.1.42"]},
+    "get_instrument_status": {"robot_ip": "192.168.1.42", "run_id": "run-xyz"},
+    "run_instrument_protocol": {"robot_ip": "192.168.1.42", "confirm": False},
 }
 
 
@@ -424,12 +433,13 @@ def test_mcp_initialize_handshake(mcp_server):
     assert resp["result"]["capabilities"]["tools"]
 
 
-def test_mcp_tools_list_returns_17_tools(mcp_server):
+def test_mcp_tools_list_returns_24_tools(mcp_server):
     _initialize(mcp_server)
     _send(mcp_server, {"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
     resp = _read_one(mcp_server)
     names = [t["name"] for t in resp["result"]["tools"]]
-    assert len(names) == 17
+    # MCP surface exposes every tool (incl. local_only instrument tools).
+    assert len(names) == 24
     for required in ("biomate_session", "search_workflow", "get_run", "export_report",
                      "resolve_accession", "browse_data", "fetch_public_data"):
         assert required in names

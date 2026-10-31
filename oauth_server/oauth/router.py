@@ -16,7 +16,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from .scopes import SCOPES
-from .server import AuthorizeError, AuthorizeRequest, OAuthServer
+from .server import AuthorizeError, AuthorizeRequest, OAuthServer, client_credentials
 from .store import OAuthStore
 
 # Lazy-init: importing this module shouldn't fail if BIOMATE_OAUTH_DB defaults
@@ -187,26 +187,38 @@ def authorize_post(
 
 @router.post("/token")
 def token_endpoint(
+    request: Request,
     grant_type: str = Form(...),
     code: Optional[str] = Form(None),
     redirect_uri: Optional[str] = Form(None),
     client_id: Optional[str] = Form(None),
+    client_secret: Optional[str] = Form(None),
     code_verifier: Optional[str] = Form(None),
     refresh_token: Optional[str] = Form(None),
     server: OAuthServer = Depends(get_server),
 ):
-    resp = server.exchange_code(
-        grant_type=grant_type,
-        code=code,
-        redirect_uri=redirect_uri,
-        client_id=client_id,
-        code_verifier=code_verifier,
-        refresh_token=refresh_token,
-    )
+    creds = client_credentials(request.headers.get("authorization"), client_id, client_secret)
+    used_basic = True
+    if not isinstance(creds, AuthorizeError):
+        client_id, client_secret, used_basic = creds
+        creds = server.exchange_code(
+            grant_type=grant_type,
+            code=code,
+            redirect_uri=redirect_uri,
+            client_id=client_id,
+            code_verifier=code_verifier,
+            refresh_token=refresh_token,
+            client_secret=client_secret,
+        )
+    resp = creds
     if isinstance(resp, AuthorizeError):
+        headers = {"Cache-Control": "no-store"}
+        if resp.error == "invalid_client" and used_basic:
+            headers["WWW-Authenticate"] = 'Basic realm="BioMate"'
         return JSONResponse(
             {"error": resp.error, "error_description": resp.error_description},
             status_code=resp.http_status,
+            headers=headers,
         )
     body = {
         "access_token": resp.access_token,

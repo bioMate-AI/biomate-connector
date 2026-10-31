@@ -28,16 +28,14 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
+from .local_tools import grantable_scopes
 from .server import SERVER_NAME, SERVER_VERSION, build_server, enabled_tool_names
-from oauth_server.oauth import SCOPES
 
 # Public HTTPS origin of THIS resource server (the MCP endpoint). Prod: https://app.biomate.ai
 PUBLIC_URL = os.environ.get("BIOMATE_MCP_PUBLIC_URL", "http://localhost:8848").rstrip("/")
 # OAuth issuer / authorization-server origin. Defaults to same origin (co-hosted).
 AUTH_SERVER_URL = os.environ.get("BIOMATE_OAUTH_ISSUER", PUBLIC_URL).rstrip("/")
 
-# Advertise exactly the scopes the OAuth core recognizes (single source of truth).
-SCOPES_SUPPORTED = sorted(SCOPES.keys())
 
 
 def _security_settings() -> TransportSecuritySettings:
@@ -76,7 +74,7 @@ async def _handle_mcp(scope, receive, send) -> None:
 
 
 # Bearer-guarded MCP transport (no-op unless BIOMATE_MCP_REQUIRE_AUTH=1).
-from .oauth_app import BearerGuard  # noqa: E402  (after _handle_mcp is defined)
+from .oauth_app import BearerGuard, TOKEN_ENDPOINT_AUTH_METHODS  # noqa: E402  (after _handle_mcp is defined)
 
 _guarded_mcp = BearerGuard(_handle_mcp)
 
@@ -98,7 +96,7 @@ async def protected_resource_metadata(request: Request) -> JSONResponse:
         {
             "resource": f"{PUBLIC_URL}/mcp",
             "authorization_servers": [AUTH_SERVER_URL],
-            "scopes_supported": SCOPES_SUPPORTED,
+            "scopes_supported": sorted(grantable_scopes()),
             "bearer_methods_supported": ["header"],
             "resource_documentation": "https://github.com/bioMate-AI/biomate-connector",
         }
@@ -119,8 +117,9 @@ async def authorization_server_metadata(request: Request) -> JSONResponse:
             "response_types_supported": ["code"],
             "grant_types_supported": ["authorization_code", "refresh_token"],
             "code_challenge_methods_supported": ["S256"],
-            "token_endpoint_auth_methods_supported": ["none"],
-            "scopes_supported": SCOPES_SUPPORTED,
+            "token_endpoint_auth_methods_supported": list(TOKEN_ENDPOINT_AUTH_METHODS),
+            "revocation_endpoint_auth_methods_supported": list(TOKEN_ENDPOINT_AUTH_METHODS),
+            "scopes_supported": sorted(grantable_scopes()),
         }
     )
 
@@ -131,7 +130,8 @@ async def _lifespan(app: Starlette):
         yield
 
 
-from .oauth_app import authorize, register, token  # noqa: E402
+from .tool_bridge import oauth_tool
+from .oauth_app import authorize, register, revoke, token  # noqa: E402
 
 _starlette_app = Starlette(
     debug=False,
@@ -158,6 +158,8 @@ _starlette_app = Starlette(
         Route("/oauth/register", register, methods=["POST"]),
         Route("/oauth/authorize", authorize, methods=["GET", "POST"]),
         Route("/oauth/token", token, methods=["POST"]),
+        Route("/oauth/revoke", revoke, methods=["POST"]),
+        Route("/oauth/tools/{name}", oauth_tool, methods=["POST"]),
     ],
 )
 

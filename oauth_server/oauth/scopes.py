@@ -30,7 +30,15 @@ SCOPES: dict[str, Scope] = {
     "reports:export": Scope(
         "reports:export", "Render methods/QC/findings reports as PDF or markdown"
     ),
+    "instruments:control": Scope(
+        "instruments:control",
+        "Discover lab instruments and run protocols on them (physical actuation)",
+    ),
 }
+
+# Never granted implicitly: a client must request it explicitly and the
+# deployment must enable local instrument tools (remote_mcp.local_tools).
+INSTRUMENT_SCOPE = "instruments:control"
 
 DEFAULT_SCOPES: FrozenSet[str] = frozenset(
     [
@@ -44,6 +52,12 @@ DEFAULT_SCOPES: FrozenSet[str] = frozenset(
         "reports:export",
     ]
 )
+
+
+# Standard scopes that carry no BioMate privilege. `offline_access` asks for a
+# refresh token, which the authorization-code flow always issues; it is removed
+# before scope resolution so it can neither fail the request nor widen the grant.
+NON_PRIVILEGE_SCOPES: FrozenSet[str] = frozenset({"offline_access"})
 
 
 def parse_scope_string(scope_str: str | None) -> FrozenSet[str]:

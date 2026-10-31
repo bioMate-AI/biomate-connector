@@ -11,13 +11,16 @@ Setup:
 """
 
 from .pkce import verify_pkce
-from .scopes import DEFAULT_SCOPES, SCOPES, parse_scope_string, validate_scopes
+from .redirects import redirect_uri_problem, validate_redirect_uri
+from .scopes import DEFAULT_SCOPES, INSTRUMENT_SCOPE, SCOPES, parse_scope_string, validate_scopes
 from .server import (
     AuthorizeError,
     AuthorizeRequest,
     GrantSummary,
     OAuthServer,
     TokenResponse,
+    canonical_resource,
+    client_credentials,
 )
 from .store import AuthorizationCode, Client, OAuthStore, RefreshTokenRecord
 from .tokens import (
@@ -36,15 +39,20 @@ __all__ = [
     "AuthorizeRequest",
     "Client",
     "DEFAULT_SCOPES",
+    "INSTRUMENT_SCOPE",
     "GrantSummary",
     "OAuthServer",
     "OAuthStore",
     "RefreshTokenRecord",
     "SCOPES",
     "TokenResponse",
+    "canonical_resource",
+    "client_credentials",
     "issue_access_token",
     "new_refresh_token",
     "parse_scope_string",
+    "redirect_uri_problem",
+    "validate_redirect_uri",
     "validate_scopes",
     "verify_access_token",
     "verify_pkce",

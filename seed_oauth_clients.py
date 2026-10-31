@@ -1,10 +1,21 @@
 #!/usr/bin/env python3
 """Seed the OAuth client table with one entry per BioMate connector surface.
 
-All connector surfaces are PUBLIC clients (PKCE, no client_secret).
+All connector surfaces seeded here are PUBLIC clients (PKCE, no client_secret).
 
 Usage:
-    BIOMATE_OAUTH_DB=/var/lib/biomate/oauth.db python backend/scripts/seed_oauth_clients.py
+    BIOMATE_OAUTH_DB=/var/lib/biomate/oauth.db python seed_oauth_clients.py
+
+Hosts that need a pre-registered CONFIDENTIAL client (Client ID + Client
+Secret entered by an admin, e.g. Benchling "Manual OAuth registration") are
+created per tenant with:
+
+    BIOMATE_OAUTH_DB=... python seed_oauth_clients.py register-confidential \
+        --client-id benchling-<tenant> --name "Benchling (<tenant>)" \
+        --redirect-uri https://<tenant>.benchling.com/1/api/llm/mcp/oauth/callback
+
+(the same command is available inside the remote_mcp image as
+``python -m oauth_server.oauth.admin register-confidential ...``).
 """
 
 from __future__ import annotations
@@ -64,6 +75,11 @@ CLIENTS = [
 
 
 def main() -> None:
+    if len(sys.argv) > 1:
+        from oauth_server.oauth.admin import main as admin_main
+
+        admin_main(sys.argv[1:])
+        return
     store = OAuthStore()
     for c in CLIENTS:
         store.register_client(c)

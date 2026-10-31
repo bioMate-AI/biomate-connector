@@ -36,7 +36,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
 
 
-Tier = Literal["agentic", "workflow", "analysis"]
+Tier = Literal["agentic", "workflow", "analysis", "instrument"]
 
 
 @dataclass(frozen=True)
@@ -51,6 +51,11 @@ class ToolSchema:
     backend_method: Literal["GET", "POST", "DELETE"] = "POST"
     # Streams progress notifications via MCP notifications/progress when true.
     streaming: bool = False
+    # Local-only: dispatched inside the locally-running MCP server rather than
+    # proxied to the cloud backend. Required for lab instruments on the user's
+    # private LAN that the cloud cannot reach. Excluded from every cloud surface
+    # (ChatGPT / Open Claw / Skill / lite); exposed only over local MCP.
+    local_only: bool = False
 
     # ── Directory / MCP tool annotations (required by the Anthropic Claude
     #    Directory submission). `title` is a human-readable display name; the
@@ -187,6 +192,33 @@ TOOL_SCHEMAS: List[ToolSchema] = [
         },
         backend_path="/api/workflows/search",
         title="Search Workflows",
+        read_only_hint=True,
+        open_world_hint=True,
+    ),
+    ToolSchema(
+        name="identify_targets",
+        tier="workflow",
+        description=(
+            "Identify and rank candidate drug targets for a disease/indication by fusing multiple "
+            "evidence channels (OpenTargets genetics, cached evidence tables, optional LLM reasoning) "
+            "through a null-calibrated evidence gate. Returns targets ranked with confidence tiers "
+            "(corroborated = AND-corroborated across >=2 channels; nominated = >=1) and per-channel "
+            "provenance. Provide disease_id (an EFO/MONDO id, e.g. MONDO_0005105 = melanoma) to enable "
+            "the genetics channel."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Indication / what targets to find."},
+                "disease_id": {"type": "string", "description": "EFO or MONDO id for the OpenTargets genetics channel (e.g. MONDO_0005105)."},
+                "candidate_targets": {"type": "array", "items": {"type": "string"}, "description": "Optional gene symbols to score/seed."},
+                "use_llm": {"type": "boolean", "description": "Add an LLM-reasoned evidence channel (default false).", "default": False},
+                "top_k": {"type": "integer", "description": "Max targets to return (default 25).", "default": 25},
+            },
+            "required": ["query"],
+        },
+        backend_path="/api/target-id/identify",
+        title="Identify Drug Targets",
         read_only_hint=True,
         open_world_hint=True,
     ),
@@ -329,6 +361,39 @@ TOOL_SCHEMAS: List[ToolSchema] = [
         title="List Runs",
         read_only_hint=True,
     ),
+    ToolSchema(
+        name="get_quota",
+        tier="workflow",
+        description="Return the user's plan limits and current usage percentage (credits/compute consumed this cycle).",
+        input_schema={"type": "object", "properties": {}},
+        backend_path="/api/billing/quota",
+        backend_method="GET",
+        title="Get Plan Quota",
+        read_only_hint=True,
+    ),
+    ToolSchema(
+        name="get_usage",
+        tier="workflow",
+        description=(
+            "Return the user's current-month usage/cost breakdown by category — LLM tokens, "
+            "vCPU-hours, GPU-hours, storage. period=history returns past months; "
+            "period=cohort returns relative cost position."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "period": {
+                    "type": "string",
+                    "enum": ["month", "history", "cohort"],
+                    "default": "month",
+                },
+            },
+        },
+        backend_path="/api/billing/usage",
+        backend_method="GET",
+        title="Get Usage Breakdown",
+        read_only_hint=True,
+    ),
 
     # ── Tier 3: outputs, analysis, reporting ──────────────────────────────────
     ToolSchema(
@@ -429,8 +494,8 @@ TOOL_SCHEMAS: List[ToolSchema] = [
         description=(
             "Query a biological/chemical database by accession or name. "
             "Use database='federated' to fan out across all sources simultaneously and merge results. "
-            "Single-source options: uniprot, pdb, alphafold, ncbi_gene, dbsnp, clinvar, gnomad, "
-            "kegg, reactome, chebi, chembl, hpo, string, pubmed."
+            "Single-source options: uniprot, pdb, pdbe, alphafold, ncbi_gene, dbsnp, clinvar, gnomad, "
+            "kegg, reactome, chebi, chembl, pubchem, bindingdb, pharos, hpo, string, pubmed."
         ),
         input_schema={
             "type": "object",
@@ -440,15 +505,25 @@ TOOL_SCHEMAS: List[ToolSchema] = [
                     "description": "Database to query. Use 'federated' to query all sources in parallel.",
                     "enum": [
                         "federated",
-                        "uniprot", "pdb", "alphafold", "ncbi_gene",
+                        "uniprot", "pdb", "pdbe", "alphafold", "ncbi_gene",
                         "dbsnp", "clinvar", "gnomad",
                         "kegg", "reactome",
-                        "chebi", "chembl",
+                        "chebi", "chembl", "pubchem", "bindingdb", "pharos",
                         "hpo", "string", "pubmed",
                     ],
                     "default": "federated",
                 },
                 "query": {"type": "string", "description": "Accession, gene symbol, compound name, or free text."},
+                "operation": {
+                    "type": "string",
+                    "description": (
+                        "Search mode chosen from user intent: 'lookup' (by ID/name, default), "
+                        "'similarity' (chembl/pubchem=chemical similarity over SMILES; "
+                        "pdb=sequence homologs over the whole PDB), or 'text' (keyword search)."
+                    ),
+                    "enum": ["lookup", "similarity", "text"],
+                    "default": "lookup",
+                },
                 "entity_type": {
                     "type": "string",
                     "description": "Hint for federated routing: gene, protein, variant, compound, pathway, disease, or omit to auto-detect.",
@@ -658,6 +733,117 @@ TOOL_SCHEMAS: List[ToolSchema] = [
         destructive_hint=False,
         idempotent_hint=False,
     ),
+
+    # ── Tier 4: instrument — LOCAL-ONLY physical actuation ─────────────────────
+    # These dispatch inside the locally-running MCP server (see
+    # dispatch_instrument_tool in biomate_mcp_server.py). A robot lives on the
+    # lab's private LAN that the cloud backend cannot reach, but this stdio MCP
+    # server runs on the scientist's machine and can. They are `local_only` and
+    # therefore never advertised on ChatGPT / Open Claw / Skill / lite surfaces.
+    ToolSchema(
+        name="list_instruments",
+        tier="instrument",
+        description=(
+            "Discover lab instruments reachable on the local network (currently "
+            "OpenTrons OT-2/Flex liquid-handling robots). Returns each robot's IP, "
+            "name, model, and health. Runs locally — only works when the MCP server "
+            "is on the same network as the instruments. Set the OPENTRONS_ROBOT_IPS "
+            "env var or pass `ips` to skip network scanning."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "ips": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Explicit robot IPs to probe (e.g. ['192.168.1.42']). Omit to use OPENTRONS_ROBOT_IPS.",
+                },
+            },
+        },
+        backend_path="local:opentrons/discover",
+        backend_method="GET",
+        title="List Lab Instruments",
+        read_only_hint=True,
+        open_world_hint=True,
+        local_only=True,
+    ),
+    ToolSchema(
+        name="get_instrument_status",
+        tier="instrument",
+        description=(
+            "Get the status of a run on a lab instrument (OpenTrons). Returns "
+            "status ('idle'|'running'|'paused'|'succeeded'|'failed'|'stopped'), "
+            "timestamps, and any errors. Poll this after run_instrument_protocol."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "robot_ip": {"type": "string", "description": "IP of the robot running the protocol."},
+                "run_id": {"type": "string", "description": "Run ID returned by run_instrument_protocol."},
+            },
+            "required": ["robot_ip", "run_id"],
+        },
+        backend_path="local:opentrons/run_status",
+        backend_method="GET",
+        title="Get Instrument Status",
+        read_only_hint=True,
+        open_world_hint=True,
+        local_only=True,
+    ),
+    ToolSchema(
+        name="run_instrument_protocol",
+        tier="instrument",
+        description=(
+            "Execute a liquid-handling protocol on an OpenTrons robot. "
+            "**Physical action — actuates real hardware.** "
+            "Two-step guardrail: called with `confirm=false` (the DEFAULT) it performs a "
+            "DRY RUN — compiles and returns the exact protocol that WOULD run, WITHOUT "
+            "contacting or actuating the robot. Review it, then call again with `confirm=true` "
+            "to verify reachability, upload, and physically start the run. "
+            "Provide either raw `protocol_code` (a valid OT-2/Flex Python protocol) or a "
+            "structured `transfers` spec (source/dest labware + pipette + well transfers), "
+            "which is compiled into a protocol for you. Returns {protocol_id, run_id, status}; "
+            "poll get_instrument_status to follow the run."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "robot_ip": {"type": "string", "description": "Target robot IP (from list_instruments)."},
+                "confirm": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": "MUST be true to physically run. false (default) = dry-run preview only, no actuation.",
+                },
+                "protocol_code": {"type": "string", "description": "Full OT-2/Flex Python protocol source. Omit if using `transfers`."},
+                "protocol_name": {"type": "string", "default": "biomate_protocol.py", "description": "Filename on the robot (must end in .py)."},
+                "transfers": {
+                    "type": "array",
+                    "description": "Structured well-to-well transfers; compiled to a protocol when protocol_code is omitted.",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "from_well": {"type": "string"},
+                            "to_well": {"type": "string"},
+                            "volume_ul": {"type": "number"},
+                        },
+                        "required": ["from_well", "to_well", "volume_ul"],
+                    },
+                },
+                "source_labware": {"type": "string", "description": "OT-2 labware for the source plate (required with `transfers`)."},
+                "dest_labware": {"type": "string", "description": "OT-2 labware for the destination plate (required with `transfers`)."},
+                "pipette": {"type": "string", "default": "p300_single_gen2", "description": "Pipette model (used with `transfers`)."},
+            },
+            "required": ["robot_ip"],
+        },
+        backend_path="local:opentrons/run",
+        backend_method="POST",
+        title="Run Instrument Protocol",
+        read_only_hint=False,
+        destructive_hint=True,
+        idempotent_hint=False,
+        open_world_hint=True,
+        local_only=True,
+    ),
 ]
 
 
@@ -727,7 +913,10 @@ def to_mcp() -> List[Dict[str, Any]]:
 
 
 def to_anthropic() -> List[Dict[str, Any]]:
-    """Anthropic Messages API / Open Claw shape. Uses `input_schema` (snake_case)."""
+    """Anthropic Messages API / Open Claw shape. Uses `input_schema` (snake_case).
+
+    Open Claw runs in the cloud, so `local_only` instrument tools are excluded.
+    """
     return [
         {
             "name": t.name,
@@ -735,11 +924,15 @@ def to_anthropic() -> List[Dict[str, Any]]:
             "input_schema": t.input_schema,
         }
         for t in TOOL_SCHEMAS
+        if not t.local_only
     ]
 
 
 def to_openai() -> List[Dict[str, Any]]:
-    """OpenAI function-calling / ChatGPT GPT Actions shape."""
+    """OpenAI function-calling / ChatGPT GPT Actions shape.
+
+    ChatGPT runs in the cloud, so `local_only` instrument tools are excluded.
+    """
     return [
         {
             "type": "function",
@@ -750,6 +943,7 @@ def to_openai() -> List[Dict[str, Any]]:
             },
         }
         for t in TOOL_SCHEMAS
+        if not t.local_only
     ]
 
 
@@ -805,6 +999,8 @@ def to_openapi() -> Dict[str, Any]:
     """
     paths: Dict[str, Any] = {}
     for t in TOOL_SCHEMAS:
+        if t.local_only:
+            continue  # cloud HTTP surface cannot reach local instruments
         op_id = t.name
         paths[f"/tools/{t.name}"] = {
             "post": {
@@ -902,6 +1098,8 @@ def to_skill_catalog() -> str:
     """Markdown catalog for the Claude Skill bundle's references/."""
     by_tier: Dict[str, List[ToolSchema]] = {"agentic": [], "workflow": [], "analysis": []}
     for t in TOOL_SCHEMAS:
+        if t.local_only:
+            continue  # local-only instrument tools are not part of the cloud Skill catalog
         by_tier[t.tier].append(t)
 
     lines: List[str] = ["# BioMate Tool Catalog", ""]

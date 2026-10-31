@@ -26,7 +26,7 @@ import os
 import secrets
 import time
 from typing import Optional
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
 from . import bootstrap  # noqa: F401  — sanitizes sys.path before the imports below
 
@@ -40,23 +40,52 @@ from oauth_server.oauth import (
     OAuthServer,
     OAuthStore,
     SCOPES,
+    canonical_resource,
+    client_credentials,
     parse_scope_string,
+    redirect_uri_problem,
     validate_scopes,
-    verify_access_token,
 )
+from oauth_server.oauth.tokens import hash_client_secret, new_client_secret
 
 from .identity import set_identity, clear_identity
+from .local_tools import grantable_scopes
 
 # ── Singleton server ─────────────────────────────────────────────────────────
 _server: Optional[OAuthServer] = None
+
+
+def mcp_resource() -> str:
+    """RFC 8707 / RFC 9728 resource URI of the MCP endpoint (canonical form)."""
+    from .app import PUBLIC_URL  # late import to avoid cycle at module load
+
+    return canonical_resource(f"{PUBLIC_URL}/mcp")
 
 
 def server() -> OAuthServer:
     global _server
     if _server is None:
         db_path = os.environ.get("BIOMATE_OAUTH_DB")
-        _server = OAuthServer(OAuthStore(db_path) if db_path else OAuthStore())
+        _server = OAuthServer(
+            OAuthStore(db_path) if db_path else OAuthStore(),
+            resource=mcp_resource(),
+            allowed_scopes=grantable_scopes(),
+        )
     return _server
+
+
+# token_endpoint_auth_method values accepted at registration. Confidential
+# clients may authenticate with either secret method at the token endpoint.
+TOKEN_ENDPOINT_AUTH_METHODS = ("none", "client_secret_basic", "client_secret_post")
+
+
+def _surface_for(client_name: str, redirect_uris: list[str]) -> str:
+    if "claude" in client_name.lower():
+        return "claude"
+    hosts = {(urlsplit(u).hostname or "").lower() for u in redirect_uris}
+    if any(h.endswith(".benchling.com") for h in hosts):
+        return "benchling"
+    return "mcp-remote"
 
 
 def _bad_request(error: str, desc: str, status: int = 400) -> JSONResponse:
@@ -73,43 +102,48 @@ async def register(request: Request) -> Response:
     redirect_uris = body.get("redirect_uris")
     if not isinstance(redirect_uris, list) or not redirect_uris:
         return _bad_request("invalid_redirect_uri", "redirect_uris (non-empty array) is required")
-    if not all(isinstance(u, str) and u.startswith(("http://", "https://")) for u in redirect_uris):
-        return _bad_request("invalid_redirect_uri", "each redirect_uri must be an absolute http(s) URL")
+    for uri in redirect_uris:
+        problem = redirect_uri_problem(uri)
+        if problem:
+            return _bad_request("invalid_redirect_uri", problem)
 
     client_name = str(body.get("client_name") or "MCP Client")
-    # Public PKCE client — the only auth method we accept for remote MCP.
     auth_method = str(body.get("token_endpoint_auth_method") or "none")
-    if auth_method != "none":
+    if auth_method not in TOKEN_ENDPOINT_AUTH_METHODS:
         return _bad_request(
             "invalid_client_metadata",
-            "only public PKCE clients (token_endpoint_auth_method=none) are supported",
+            "token_endpoint_auth_method must be one of: " + ", ".join(TOKEN_ENDPOINT_AUTH_METHODS),
         )
+    public = auth_method == "none"
+    client_secret = None if public else new_client_secret()
 
     client_id = "dcr_" + secrets.token_urlsafe(24)
-    surface = "claude" if "claude" in client_name.lower() else "mcp-remote"
+    issued_at = int(time.time())
     server().store.register_client(
         Client(
             client_id=client_id,
             name=client_name,
-            surface=surface,
+            surface=_surface_for(client_name, redirect_uris),
             redirect_uris=list(redirect_uris),
-            public=True,
-            client_secret_hash=None,
+            public=public,
+            client_secret_hash=hash_client_secret(client_secret) if client_secret else None,
         )
     )
-    return JSONResponse(
-        {
-            "client_id": client_id,
-            "client_id_issued_at": int(time.time()),
-            "client_name": client_name,
-            "redirect_uris": redirect_uris,
-            "grant_types": ["authorization_code", "refresh_token"],
-            "response_types": ["code"],
-            "token_endpoint_auth_method": "none",
-            "scope": " ".join(sorted(SCOPES.keys())),
-        },
-        status_code=201,
-    )
+    payload = {
+        "client_id": client_id,
+        "client_id_issued_at": issued_at,
+        "client_name": client_name,
+        "redirect_uris": redirect_uris,
+        "grant_types": ["authorization_code", "refresh_token"],
+        "response_types": ["code"],
+        "token_endpoint_auth_method": auth_method,
+        "scope": " ".join(sorted(grantable_scopes())),
+    }
+    if client_secret:
+        # RFC 7591 §3.2.1: client_secret_expires_at is REQUIRED with a secret; 0 = never.
+        payload["client_secret"] = client_secret
+        payload["client_secret_expires_at"] = 0
+    return JSONResponse(payload, status_code=201, headers={"Cache-Control": "no-store"})
 
 
 # ── Authorization endpoint — RFC 6749 §4.1 + PKCE ────────────────────────────
@@ -122,6 +156,7 @@ def _authorize_request(params) -> AuthorizeRequest:
         code_challenge_method=params.get("code_challenge_method", ""),
         scope=params.get("scope"),
         state=params.get("state"),
+        resource=tuple(params.getlist("resource")),
     )
 
 
@@ -155,6 +190,8 @@ def _consent_page(req: AuthorizeRequest, client_name: str, scopes, error: str | 
     hidden = "".join(
         f'<input type="hidden" name="{f}" value="{escape(getattr(req, f) or "")}">'
         for f in _OAUTH_PARAM_FIELDS
+    ) + "".join(
+        f'<input type="hidden" name="resource" value="{escape(r)}">' for r in (req.resource or ())
     )
     err_html = f'<p class="err">{escape(error)}</p>' if error else ""
     html = f"""<!doctype html><html><head><meta charset="utf-8">
@@ -233,35 +270,30 @@ async def _biomate_login(email: str, password: str) -> dict:
 
 
 async def _ensure_user_api_key(user_id: str, session_token: str | None) -> None:
-    """Mint + store a per-user bm_live_ API key so tool calls run as this user.
-
-    Idempotent-ish: reuses an already-stored key. Best-effort — a failure here
-    leaves the shared-key fallback in place rather than blocking authorization.
-    """
-    import logging
-
+    """Provision the caller's credential; never authorize a shared-account fallback."""
     import httpx
-
-    from .credentials import has_api_key, put_api_key
+    from .credentials import get_api_key, put_api_key
     from oauth_server.oauth.tokens import now
-
-    log = logging.getLogger("biomate.remote_mcp.oauth")
-    if not session_token or has_api_key(user_id):
-        return
-    try:
+    existing = get_api_key(user_id)
+    if existing:
         async with httpx.AsyncClient(timeout=15) as http:
-            r = await http.post(
-                f"{_login_url()}/api/user/api-keys",
-                headers={"Authorization": f"Bearer {session_token}"},
-                json={"name": "Claude MCP connector"},
-            )
-        key = r.json().get("key") if r.status_code == 200 else None
-        if key:
-            put_api_key(user_id, key, now())
-        else:
-            log.warning("api-key mint returned no key (status=%s) — using shared key fallback", r.status_code)
-    except Exception as exc:  # noqa: BLE001
-        log.warning("api-key mint failed (%s) — using shared key fallback", exc.__class__.__name__)
+            probe = await http.get(f"{_login_url()}/api/auth/me", headers={"Authorization": f"Bearer {existing}"})
+        if probe.is_success and str((probe.json().get("user") or {}).get("id")) == user_id:
+            return
+        if not probe.is_success and probe.status_code not in (401, 403):
+            raise ValueError("Could not verify existing connector credentials")
+    if not session_token:
+        raise ValueError("Missing authenticated BioMate session")
+    async with httpx.AsyncClient(timeout=15) as http:
+        response = await http.post(
+            f"{_login_url()}/api/user/api-keys",
+            headers={"Authorization": f"Bearer {session_token}"},
+            json={"name": "BioMate OAuth connector"},
+        )
+    key = response.json().get("key") if response.is_success else None
+    if not isinstance(key, str) or not key.startswith("bm_live_"):
+        raise ValueError("Could not provision personal connector credentials")
+    put_api_key(user_id, key, now())
 
 
 async def authorize(request: Request) -> Response:
@@ -300,8 +332,11 @@ async def authorize(request: Request) -> Response:
     login = await _biomate_login(str(form.get("email", "")), str(form.get("password", "")))
     if not login["ok"]:
         return _consent_page(req, outcome.client_name, outcome.requested_scopes, error=login["error"])
-    # Mint + store a per-user API key so tool calls run as this user (best-effort).
-    await _ensure_user_api_key(login["user_id"], login.get("token"))
+    # Mint + store a per-user API key so tool calls run as this user (required).
+    try:
+        await _ensure_user_api_key(login["user_id"], login.get("token"))
+    except Exception:
+        return _consent_page(req, outcome.client_name, outcome.requested_scopes, error="Could not connect your account. Please retry.")
     return _issue_code(req, login["user_id"], outcome.requested_scopes)
 
 
@@ -319,17 +354,24 @@ def _issue_code(req: AuthorizeRequest, user_id: str, granted_scopes) -> Response
 async def token(request: Request) -> Response:
     form = await request.form()
     grant_type = form.get("grant_type", "")
+    creds = client_credentials(
+        request.headers.get("authorization"), form.get("client_id"), form.get("client_secret")
+    )
+    if isinstance(creds, AuthorizeError):
+        return _token_error(creds, basic_attempted=True)
+    client_id, client_secret, used_basic = creds
     result = server().exchange_code(
         grant_type=grant_type,
         code=form.get("code"),
         redirect_uri=form.get("redirect_uri"),
-        client_id=form.get("client_id"),
+        client_id=client_id,
         code_verifier=form.get("code_verifier"),
         refresh_token=form.get("refresh_token"),
+        client_secret=client_secret,
+        resource=form.getlist("resource"),
     )
     if isinstance(result, AuthorizeError):
-        # invalid_grant / invalid_request → 400 per RFC 6749 §5.2
-        return _bad_request(result.error, result.error_description, result.http_status)
+        return _token_error(result, basic_attempted=used_basic)
     payload = {
         "access_token": result.access_token,
         "token_type": result.token_type,
@@ -339,6 +381,43 @@ async def token(request: Request) -> Response:
     if result.refresh_token:
         payload["refresh_token"] = result.refresh_token
     return JSONResponse(payload, headers={"Cache-Control": "no-store", "Pragma": "no-cache"})
+
+
+def _token_error(err: AuthorizeError, *, basic_attempted: bool) -> JSONResponse:
+    """RFC 6749 §5.2 error; invalid_client is 401 + a Basic challenge."""
+    resp = _bad_request(err.error, err.error_description, err.http_status)
+    if err.error == "invalid_client" and basic_attempted:
+        resp.headers["WWW-Authenticate"] = 'Basic realm="BioMate"'
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+# ── Revocation endpoint — RFC 7009 ───────────────────────────────────────────
+async def revoke(request: Request) -> Response:
+    """Revoke a refresh or access token issued to the authenticated client.
+
+    Confidential clients authenticate as at the token endpoint; public clients
+    identify themselves with client_id. Unknown tokens still get 200 (§2.2).
+    """
+    form = await request.form()
+    creds = client_credentials(
+        request.headers.get("authorization"), form.get("client_id"), form.get("client_secret")
+    )
+    if isinstance(creds, AuthorizeError):
+        return _token_error(creds, basic_attempted=True)
+    client_id, client_secret, used_basic = creds
+    client = server().authenticate_client(client_id, client_secret)
+    if isinstance(client, AuthorizeError):
+        return _token_error(client, basic_attempted=used_basic)
+    token_value = form.get("token")
+    if not token_value:
+        return _token_error(
+            AuthorizeError("invalid_request", "token is required"), basic_attempted=used_basic
+        )
+    server().revoke_for_client(
+        str(token_value), client_id=client.client_id, token_type_hint=form.get("token_type_hint")
+    )
+    return Response(status_code=200, headers={"Cache-Control": "no-store"})
 
 
 # ── Bearer guard for /mcp ────────────────────────────────────────────────────
@@ -377,7 +456,7 @@ class BearerGuard:
             return
 
         token_str = _extract_bearer(scope)
-        claims = verify_access_token(token_str) if token_str else None
+        claims = server().verify_access(token_str, resource=mcp_resource()) if token_str else None
         if claims is None:
             challenge = f'Bearer resource_metadata="{_prm_url()}"'
             body = b'{"error":"invalid_token","error_description":"missing or invalid bearer token"}'
