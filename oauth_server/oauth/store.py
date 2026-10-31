@@ -46,6 +46,7 @@ class AuthorizationCode:
     code_challenge_method: str
     surface: str
     expires_at: int
+    resource: Optional[str] = None  # RFC 8707 resource the grant is bound to
 
 
 @dataclass
@@ -57,6 +58,7 @@ class RefreshTokenRecord:
     surface: str
     expires_at: int
     revoked: bool = False
+    resource: Optional[str] = None
 
 
 _SCHEMA = """
@@ -77,7 +79,8 @@ CREATE TABLE IF NOT EXISTS authz_codes (
     code_challenge TEXT NOT NULL,
     code_challenge_method TEXT NOT NULL,
     surface TEXT NOT NULL,
-    expires_at INTEGER NOT NULL
+    expires_at INTEGER NOT NULL,
+    resource TEXT
 );
 CREATE TABLE IF NOT EXISTS refresh_tokens (
     token_hash TEXT PRIMARY KEY,
@@ -86,11 +89,21 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
     scopes TEXT NOT NULL,
     surface TEXT NOT NULL,
     expires_at INTEGER NOT NULL,
-    revoked INTEGER NOT NULL DEFAULT 0
+    revoked INTEGER NOT NULL DEFAULT 0,
+    resource TEXT
+);
+CREATE TABLE IF NOT EXISTS revoked_access_tokens (
+    jti TEXT PRIMARY KEY,
+    expires_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_refresh_user ON refresh_tokens(user_id);
 CREATE INDEX IF NOT EXISTS idx_refresh_surface ON refresh_tokens(surface);
 """
+
+_INSERT_REFRESH = (
+    "INSERT OR REPLACE INTO refresh_tokens (token_hash, client_id, user_id, scopes,"
+    " surface, expires_at, revoked, resource) VALUES (?,?,?,?,?,?,0,?)"
+)
 
 
 class OAuthStore:
@@ -100,6 +113,11 @@ class OAuthStore:
         self._lock = threading.RLock()
         with self._connect() as conn:
             conn.executescript(_SCHEMA)
+            # Databases created before RFC 8707 support lack the resource column.
+            for table in ("authz_codes", "refresh_tokens"):
+                cols = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
+                if "resource" not in cols:
+                    conn.execute(f"ALTER TABLE {table} ADD COLUMN resource TEXT")
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self._db_path, isolation_level=None)
@@ -143,7 +161,9 @@ class OAuthStore:
     def save_authz_code(self, code: AuthorizationCode) -> None:
         with self._lock, self._connect() as conn:
             conn.execute(
-                "INSERT INTO authz_codes VALUES (?,?,?,?,?,?,?,?,?)",
+                "INSERT INTO authz_codes (code, client_id, user_id, redirect_uri, scopes,"
+                " code_challenge, code_challenge_method, surface, expires_at, resource)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?)",
                 (
                     code.code,
                     code.client_id,
@@ -154,6 +174,7 @@ class OAuthStore:
                     code.code_challenge_method,
                     code.surface,
                     code.expires_at,
+                    code.resource,
                 ),
             )
 
@@ -178,6 +199,7 @@ class OAuthStore:
             code_challenge_method=row["code_challenge_method"],
             surface=row["surface"],
             expires_at=row["expires_at"],
+            resource=row["resource"],
         )
 
     # --- refresh tokens ---
@@ -190,6 +212,7 @@ class OAuthStore:
         user_id: str,
         scopes: FrozenSet[str],
         surface: str,
+        resource: Optional[str] = None,
     ) -> None:
         rec = RefreshTokenRecord(
             token_hash=hash_refresh_token(token),
@@ -198,10 +221,11 @@ class OAuthStore:
             scopes=scopes,
             surface=surface,
             expires_at=now() + REFRESH_TOKEN_TTL_SECONDS,
+            resource=resource,
         )
         with self._lock, self._connect() as conn:
             conn.execute(
-                "INSERT OR REPLACE INTO refresh_tokens VALUES (?,?,?,?,?,?,0)",
+                _INSERT_REFRESH,
                 (
                     rec.token_hash,
                     rec.client_id,
@@ -209,6 +233,7 @@ class OAuthStore:
                     " ".join(sorted(rec.scopes)),
                     rec.surface,
                     rec.expires_at,
+                    rec.resource,
                 ),
             )
 
@@ -228,10 +253,17 @@ class OAuthStore:
             surface=row["surface"],
             expires_at=row["expires_at"],
             revoked=bool(row["revoked"]),
+            resource=row["resource"],
         )
 
-    def rotate_refresh_token(self, old_token: str, new_token: str) -> None:
-        """Atomic rotate-and-revoke per OAuth 2.1 §6.1."""
+    def rotate_refresh_token(
+        self, old_token: str, new_token: str, *, resource: Optional[str] = None
+    ) -> None:
+        """Atomic rotate-and-revoke per OAuth 2.1 §6.1.
+
+        The new token keeps the old token's resource binding; ``resource`` only
+        supplies one when the old token had none.
+        """
         old_hash = hash_refresh_token(old_token)
         rec = self.lookup_refresh_token(old_token)
         if rec is None:
@@ -242,7 +274,7 @@ class OAuthStore:
                 "UPDATE refresh_tokens SET revoked=1 WHERE token_hash=?", (old_hash,)
             )
             conn.execute(
-                "INSERT OR REPLACE INTO refresh_tokens VALUES (?,?,?,?,?,?,0)",
+                _INSERT_REFRESH,
                 (
                     hash_refresh_token(new_token),
                     rec.client_id,
@@ -250,6 +282,7 @@ class OAuthStore:
                     " ".join(sorted(rec.scopes)),
                     rec.surface,
                     now() + REFRESH_TOKEN_TTL_SECONDS,
+                    rec.resource or resource,
                 ),
             )
             conn.execute("COMMIT")
@@ -260,6 +293,21 @@ class OAuthStore:
             conn.execute(
                 "UPDATE refresh_tokens SET revoked=1 WHERE token_hash=?", (h,)
             )
+
+    def revoke_access_token(self, jti: str, expires_at: int) -> None:
+        """Deny-list a JWT access token until it would have expired anyway."""
+        with self._lock, self._connect() as conn:
+            conn.execute("DELETE FROM revoked_access_tokens WHERE expires_at<?", (now(),))
+            conn.execute(
+                "INSERT OR REPLACE INTO revoked_access_tokens VALUES (?,?)", (jti, expires_at)
+            )
+
+    def is_access_token_revoked(self, jti: str) -> bool:
+        with self._lock, self._connect() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM revoked_access_tokens WHERE jti=?", (jti,)
+            ).fetchone()
+        return row is not None
 
     def revoke_all_for_surface(self, user_id: str, surface: str) -> int:
         with self._lock, self._connect() as conn:

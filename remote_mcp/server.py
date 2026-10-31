@@ -27,16 +27,27 @@ import tools_manifest  # connector: mcp/tools_manifest.py
 import biomate_mcp_server as stdio  # connector: mcp/biomate_mcp_server.py
 
 from .identity import current_identity, resolve_api_key
+from .local_tools import (
+    check_instrument_call,
+    local_only_tool_names,
+    local_tools_allowed,
+)
 
 log = logging.getLogger("biomate.remote_mcp")
 
 SERVER_NAME = "biomate"
 SERVER_VERSION = getattr(stdio, "SERVER_VERSION", "2.0.0")
 
-# Minimum OAuth scope required to invoke each tool. Enforced only when a caller
-# identity is present (i.e. bearer auth is on); absent for the no-auth handshake.
+# Minimum OAuth scope required to invoke each tool. Enforced whenever a caller
+# identity is present (bearer auth on); a tool missing from this map is refused.
 _TOOL_SCOPES: dict[str, str] = {
     "search_workflow": "workflows:search",
+    "identify_targets": "workflows:search",
+    "get_quota": "billing:read",
+    "get_usage": "billing:read",
+    "list_instruments": "instruments:control",
+    "get_instrument_status": "instruments:control",
+    "run_instrument_protocol": "instruments:control",
     "get_workflow_spec": "workflows:search",
     "get_run": "runs:read",
     "watch_run": "runs:read",
@@ -73,10 +84,14 @@ def _all_tool_defs() -> list[dict[str, Any]]:
 def enabled_tool_names() -> set[str]:
     raw = os.environ.get("BIOMATE_MCP_TOOLS", "").strip()
     if raw == "*":
-        return {t["name"] for t in _all_tool_defs()}
-    if raw:
-        return {n.strip() for n in raw.split(",") if n.strip()}
-    return set(_DEFAULT_TOOLS)
+        names = {t["name"] for t in _all_tool_defs()}
+    elif raw:
+        names = {n.strip() for n in raw.split(",") if n.strip()}
+    else:
+        names = set(_DEFAULT_TOOLS)
+    if not local_tools_allowed():
+        names -= local_only_tool_names()
+    return names
 
 
 def _tool_defs() -> list[dict[str, Any]]:
@@ -118,15 +133,21 @@ def build_server() -> Server:
     async def _call_tool(name: str, arguments: dict[str, Any]) -> list[types.ContentBlock]:
         if name not in enabled_tool_names():
             raise ValueError(f"Tool not enabled on the remote endpoint: {name}")
-        # Enforce scope only when a caller identity is present (bearer auth on).
+        local_only = name in local_only_tool_names()
+        if local_only and not local_tools_allowed():
+            raise ValueError(f"Tool not enabled on the remote endpoint: {name}")
         ident = current_identity()
         if ident is not None:
             required = _TOOL_SCOPES.get(name)
-            if required and required not in ident.scopes:
+            if required is None:
+                raise ValueError(f"Tool has no scope mapping on the remote endpoint: {name}")
+            if required not in ident.scopes:
                 raise ValueError(
                     f"insufficient_scope: '{name}' requires the '{required}' scope"
                 )
         client = _client_for_call()
+        if local_only:
+            check_instrument_call(name, arguments or {})
 
         if name in _STREAMING_TOOLS:
             return await _run_streaming(server, client, name, arguments)
